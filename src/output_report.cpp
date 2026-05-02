@@ -4,6 +4,14 @@
 
 namespace {
 
+constexpr uint8_t kValidFlag0CompatibleVibration = 1u << 0u;
+constexpr uint8_t kValidFlag0HapticsSelect = 1u << 1u;
+constexpr uint8_t kValidFlag0RightTriggerMotor = 1u << 2u;
+constexpr uint8_t kValidFlag0LeftTriggerMotor = 1u << 3u;
+constexpr uint8_t kValidFlag1MicLed = 1u << 0u;
+constexpr uint8_t kValidFlag1Lightbar = 1u << 2u;
+constexpr uint8_t kValidFlag1PlayerLeds = 1u << 4u;
+
 void write_trigger(uint8_t* target, const ds5_trigger_effect& effect) {
   target[0] = static_cast<uint8_t>(effect.mode);
   target[1] = effect.start_position;
@@ -25,8 +33,9 @@ ds5_internal_output_report ds5_internal_build_usb_output_report(const ds5_output
   std::memset(report.bytes, 0, sizeof(report.bytes));
 
   report.bytes[0] = 0x02u;
-  report.bytes[1] = 0xffu;
-  report.bytes[2] = 0xf7u;
+  report.bytes[1] = kValidFlag0CompatibleVibration | kValidFlag0HapticsSelect |
+                    kValidFlag0RightTriggerMotor | kValidFlag0LeftTriggerMotor;
+  report.bytes[2] = kValidFlag1MicLed | kValidFlag1Lightbar | kValidFlag1PlayerLeds;
 
   if (!state) {
     return report;

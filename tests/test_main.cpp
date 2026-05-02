@@ -147,8 +147,8 @@ static void test_output_report_builder_light_rumble_trigger() {
   ds5_internal_output_report report = ds5_internal_build_usb_output_report(&output);
   assert(report.size == 48u);
   assert(report.bytes[0] == 0x02);
-  assert(report.bytes[1] == 0xff);
-  assert(report.bytes[2] == 0xf7);
+  assert(report.bytes[1] == 0x0f);
+  assert(report.bytes[2] == 0x15);
   assert(report.bytes[3] == 192);
   assert(report.bytes[4] == 64);
   assert(report.bytes[9] == DS5_MIC_LED_ON);

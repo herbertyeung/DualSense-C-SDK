@@ -1,5 +1,12 @@
 #include <dualsense/dualsense.h>
 
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <Windows.h>
+#include <endpointvolume.h>
+#include <mmdeviceapi.h>
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -16,10 +23,93 @@
 
 namespace {
 
+template <typename T>
+class ComPtr {
+ public:
+  ~ComPtr() { reset(); }
+  T** put() {
+    reset();
+    return &ptr_;
+  }
+  T* get() const { return ptr_; }
+  T* operator->() const { return ptr_; }
+  void reset() {
+    if (ptr_) {
+      ptr_->Release();
+      ptr_ = nullptr;
+    }
+  }
+
+ private:
+  T* ptr_ = nullptr;
+};
+
 void print_result(ds5_result result) {
   if (result != DS5_OK) {
     std::cerr << "error: " << ds5_get_last_error() << " (" << result << ")\n";
   }
+}
+
+std::wstring utf8_to_wide(const char* value) {
+  if (!value) {
+    return {};
+  }
+  const int required = MultiByteToWideChar(CP_UTF8, 0, value, -1, nullptr, 0);
+  if (required <= 1) {
+    return {};
+  }
+  std::wstring result(static_cast<size_t>(required - 1), L'\0');
+  MultiByteToWideChar(CP_UTF8, 0, value, -1, &result[0], required);
+  return result;
+}
+
+void make_render_endpoint_audible(const ds5_audio_endpoint& endpoint) {
+  HRESULT com_hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+  const bool owns_com = SUCCEEDED(com_hr);
+  if (FAILED(com_hr) && com_hr != RPC_E_CHANGED_MODE) {
+    std::cerr << "warning: failed to initialize COM for endpoint volume\n";
+    return;
+  }
+
+  ComPtr<IMMDeviceEnumerator> enumerator;
+  HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator),
+                                reinterpret_cast<void**>(enumerator.put()));
+  if (FAILED(hr)) {
+    std::cerr << "warning: failed to create audio endpoint enumerator\n";
+    if (owns_com) CoUninitialize();
+    return;
+  }
+
+  ComPtr<IMMDevice> device;
+  const std::wstring id = utf8_to_wide(endpoint.id);
+  hr = enumerator->GetDevice(id.c_str(), device.put());
+  if (FAILED(hr)) {
+    std::cerr << "warning: failed to open render endpoint for volume control\n";
+    if (owns_com) CoUninitialize();
+    return;
+  }
+
+  ComPtr<IAudioEndpointVolume> volume;
+  hr = device->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, nullptr, reinterpret_cast<void**>(volume.put()));
+  if (FAILED(hr)) {
+    std::cerr << "warning: failed to open endpoint volume control\n";
+    if (owns_com) CoUninitialize();
+    return;
+  }
+
+  BOOL muted = FALSE;
+  float level = 0.0f;
+  volume->GetMute(&muted);
+  volume->GetMasterVolumeLevelScalar(&level);
+  std::cout << "endpoint volume before playback: mute=" << (muted ? "yes" : "no")
+            << " volume=" << static_cast<int>(level * 100.0f) << "%\n";
+  volume->SetMute(FALSE, nullptr);
+  if (level < 0.90f) {
+    volume->SetMasterVolumeLevelScalar(1.0f, nullptr);
+    std::cout << "endpoint volume set to 100% for playback test\n";
+  }
+
+  if (owns_com) CoUninitialize();
 }
 
 void print_state_line(const ds5_state& state) {
@@ -83,6 +173,25 @@ bool open_first_device(ds5_context* context, const std::vector<ds5_device_info>&
     return false;
   }
   return true;
+}
+
+void configure_internal_speaker(ds5_context* context, const std::vector<ds5_device_info>& devices) {
+  ds5_device* device = nullptr;
+  if (!open_first_device(context, devices, &device)) {
+    return;
+  }
+
+  uint8_t report[48]{};
+  report[0] = 0x02;
+  report[1] = (1u << 5u) | (1u << 7u);  // speaker volume + audio routing controls
+  report[6] = 0x64;                      // internal speaker volume, matching common DualSense tools
+  report[8] = 3u << 4u;                  // route the right channel to the internal speaker
+  ds5_result result = ds5_send_raw_output_report(device, report, sizeof(report));
+  print_result(result);
+  if (result == DS5_OK) {
+    std::cout << "DualSense internal speaker route and volume configured\n";
+  }
+  ds5_close(device);
 }
 
 std::vector<int16_t> make_tone(uint32_t sample_rate, uint32_t duration_ms) {
@@ -319,6 +428,8 @@ int main(int argc, char** argv) {
     }
     for (const auto& endpoint : endpoints) {
       if (!endpoint.is_capture) {
+        make_render_endpoint_audible(endpoint);
+        configure_internal_speaker(context, devices);
         std::cout << "Playing " << duration_ms << "ms tone on " << endpoint.name << "\n";
         ds5_audio_format format{};
         format.size = sizeof(format);
@@ -347,6 +458,8 @@ int main(int argc, char** argv) {
     }
     for (const auto& endpoint : endpoints) {
       if (!endpoint.is_capture) {
+        make_render_endpoint_audible(endpoint);
+        configure_internal_speaker(context, devices);
         const uint32_t frame_bytes = static_cast<uint32_t>(format.channels * (format.bits_per_sample / 8u));
         const uint32_t duration_ms = frame_bytes > 0u && format.sample_rate > 0u
                                          ? static_cast<uint32_t>((static_cast<uint64_t>(pcm.size()) * 1000u) /
