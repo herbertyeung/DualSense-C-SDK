@@ -181,10 +181,10 @@ Poll input reports:
 .\build-vs2026\Debug\dualsense_diag.exe --poll 180
 ```
 
-Play a short tone on the first matching render endpoint:
+Play a tone on the first matching render endpoint:
 
 ```powershell
-.\build-vs2026\Debug\dualsense_diag.exe --tone
+.\build-vs2026\Debug\dualsense_diag.exe --tone 1500
 ```
 
 Capture from the first matching microphone endpoint for one second:
@@ -407,10 +407,10 @@ int main() {
 .\build-vs2026\Debug\dualsense_diag.exe --poll 180
 ```
 
-在第一个匹配的播放 endpoint 上播放短音：
+在第一个匹配的播放 endpoint 上播放测试音：
 
 ```powershell
-.\build-vs2026\Debug\dualsense_diag.exe --tone
+.\build-vs2026\Debug\dualsense_diag.exe --tone 1500
 ```
 
 从第一个匹配的麦克风 endpoint 采集一秒：

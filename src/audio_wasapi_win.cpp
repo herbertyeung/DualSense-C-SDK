@@ -334,6 +334,7 @@ ds5_result ds5_audio_play_pcm(ds5_context* context, const char* endpoint_id_valu
   const uint8_t* source = static_cast<const uint8_t*>(playback_pcm);
   uint32_t remaining = playback_bytes;
   const uint32_t frame_bytes = wave_to_use->nBlockAlign;
+  uint32_t written_frames_total = 0;
 
   if (FAILED(audio_client->Start())) {
     CoTaskMemFree(mix_wave_ptr);
@@ -366,9 +367,23 @@ ds5_result ds5_audio_play_pcm(ds5_context* context, const char* endpoint_id_valu
     render_client->ReleaseBuffer(frames_to_write, 0);
     source += copy_bytes;
     remaining -= copy_bytes;
+    written_frames_total += frames_to_write;
   }
 
-  std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  // Shared-mode render clients queue data faster than the endpoint can play it.
+  // Wait for the queued frames to drain before Stop(), otherwise short tones can
+  // be discarded before the DualSense speaker makes an audible sound.
+  const uint32_t expected_ms = wave_to_use->nSamplesPerSec > 0
+                                  ? (written_frames_total * 1000u) / wave_to_use->nSamplesPerSec
+                                  : 0u;
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(expected_ms + 500u);
+  while (std::chrono::steady_clock::now() < deadline) {
+    UINT32 padding = 0;
+    if (FAILED(audio_client->GetCurrentPadding(&padding)) || padding == 0u) {
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(8));
+  }
   audio_client->Stop();
   CoTaskMemFree(mix_wave_ptr);
   return DS5_OK;

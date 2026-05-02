@@ -87,7 +87,7 @@ std::vector<int16_t> make_tone(uint32_t sample_rate, uint32_t duration_ms) {
   std::vector<int16_t> pcm(frames * 2u);
   for (uint32_t i = 0; i < frames; ++i) {
     const double t = static_cast<double>(i) / static_cast<double>(sample_rate);
-    const int16_t sample = static_cast<int16_t>(std::sin(t * 440.0 * 6.283185307179586) * 9000.0);
+    const int16_t sample = static_cast<int16_t>(std::sin(t * 880.0 * 6.283185307179586) * 22000.0);
     pcm[i * 2u + 0u] = sample;
     pcm[i * 2u + 1u] = sample;
   }
@@ -258,16 +258,25 @@ int main(int argc, char** argv) {
   }
 
   if (argc > 1 && std::string(argv[1]) == "--tone") {
+    uint32_t duration_ms = 1500;
+    if (argc > 2) {
+      duration_ms = static_cast<uint32_t>(std::max(100, std::stoi(argv[2])));
+    }
     for (const auto& endpoint : endpoints) {
       if (!endpoint.is_capture) {
+        std::cout << "Playing " << duration_ms << "ms tone on " << endpoint.name << "\n";
         ds5_audio_format format{};
         format.size = sizeof(format);
         format.version = DS5_STRUCT_VERSION;
         format.sample_rate = 48000;
         format.channels = 2;
         format.bits_per_sample = 16;
-        auto tone = make_tone(format.sample_rate, 250);
-        print_result(ds5_audio_play_pcm(context, endpoint.id, tone.data(), static_cast<uint32_t>(tone.size() * sizeof(int16_t)), &format));
+        auto tone = make_tone(format.sample_rate, duration_ms);
+        result = ds5_audio_play_pcm(context, endpoint.id, tone.data(), static_cast<uint32_t>(tone.size() * sizeof(int16_t)), &format);
+        print_result(result);
+        if (result == DS5_OK) {
+          std::cout << "tone playback completed\n";
+        }
         break;
       }
     }
