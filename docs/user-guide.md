@@ -187,6 +187,12 @@ Play a tone on the first matching render endpoint:
 .\build-vs2026\Debug\dualsense_diag.exe --tone 1500
 ```
 
+Play a PCM 16-bit WAV file on the first matching render endpoint:
+
+```powershell
+.\build-vs2026\Debug\dualsense_diag.exe --play-wav .\build-vs2026\Debug\narration_dualsense.wav
+```
+
 Capture from the first matching microphone endpoint for one second:
 
 ```powershell
@@ -411,6 +417,12 @@ int main() {
 
 ```powershell
 .\build-vs2026\Debug\dualsense_diag.exe --tone 1500
+```
+
+在第一个匹配的播放 endpoint 上播放 PCM 16-bit WAV 文件：
+
+```powershell
+.\build-vs2026\Debug\dualsense_diag.exe --play-wav .\build-vs2026\Debug\narration_dualsense.wav
 ```
 
 从第一个匹配的麦克风 endpoint 采集一秒：
