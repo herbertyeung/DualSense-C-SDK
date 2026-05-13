@@ -5,6 +5,7 @@
 int main() {
   try {
     DualSense::Context context;
+    std::cout << "DualSense SDK " << DualSense::runtimeVersionString() << "\n";
     auto devices = context.enumerate();
     std::cout << "DualSense controllers found: " << devices.size() << "\n";
     if (!devices.empty()) {

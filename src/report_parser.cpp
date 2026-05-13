@@ -49,8 +49,7 @@ void clear_state(ds5_state* state, ds5_transport transport) {
 
 ds5_capabilities ds5_internal_capabilities_for_transport(ds5_transport transport) {
   ds5_capabilities caps{};
-  caps.size = sizeof(caps);
-  caps.version = DS5_STRUCT_VERSION;
+  ds5_capabilities_init(&caps);
   caps.transport = transport;
   caps.flags = DS5_CAP_INPUT | DS5_CAP_TOUCHPAD | DS5_CAP_IMU | DS5_CAP_RAW_REPORTS;
 

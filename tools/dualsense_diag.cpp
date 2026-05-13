@@ -250,8 +250,7 @@ bool load_wav_pcm16(const char* path, std::vector<uint8_t>& pcm, ds5_audio_forma
   }
 
   pcm.assign(data.begin() + data_offset, data.begin() + data_offset + data_size);
-  format.size = sizeof(format);
-  format.version = DS5_STRUCT_VERSION;
+  ds5_audio_format_init(&format, 0, 0, 0);
   format.sample_rate = sample_rate;
   format.channels = channels;
   format.bits_per_sample = bits;
@@ -287,8 +286,7 @@ int main(int argc, char** argv) {
 
   std::vector<ds5_device_info> devices(count);
   for (auto& device : devices) {
-    device.size = sizeof(device);
-    device.version = DS5_STRUCT_VERSION;
+    ds5_device_info_init(&device);
   }
   result = ds5_enumerate(context, devices.data(), count, &count);
   if (result != DS5_OK) {
@@ -311,8 +309,7 @@ int main(int argc, char** argv) {
   result = ds5_audio_enumerate_endpoints(context, nullptr, 0, &audio_count);
   std::vector<ds5_audio_endpoint> endpoints(audio_count);
   for (auto& endpoint : endpoints) {
-    endpoint.size = sizeof(endpoint);
-    endpoint.version = DS5_STRUCT_VERSION;
+    ds5_audio_endpoint_init(&endpoint);
   }
   if (audio_count > 0) {
     ds5_audio_enumerate_endpoints(context, endpoints.data(), audio_count, &audio_count);
@@ -328,8 +325,7 @@ int main(int argc, char** argv) {
     ds5_device* device = nullptr;
     if (open_first_device(context, devices, &device)) {
       ds5_capabilities capabilities{};
-      capabilities.size = sizeof(capabilities);
-      capabilities.version = DS5_STRUCT_VERSION;
+      ds5_capabilities_init(&capabilities);
       result = ds5_get_capabilities(device, &capabilities);
       if (result == DS5_OK) {
         std::cout << "Opened capabilities=0x" << std::hex << capabilities.flags << std::dec << "\n";
@@ -408,8 +404,7 @@ int main(int argc, char** argv) {
                 << " reports. Move/tilt the controller and press Triangle.\n";
       for (uint32_t i = 0; i < frames; ++i) {
         ds5_state state{};
-        state.size = sizeof(state);
-        state.version = DS5_STRUCT_VERSION;
+        ds5_state_init(&state);
         result = ds5_poll_state(device, &state);
         if (result != DS5_OK) {
           print_result(result);
@@ -432,11 +427,7 @@ int main(int argc, char** argv) {
         configure_internal_speaker(context, devices);
         std::cout << "Playing " << duration_ms << "ms tone on " << endpoint.name << "\n";
         ds5_audio_format format{};
-        format.size = sizeof(format);
-        format.version = DS5_STRUCT_VERSION;
-        format.sample_rate = 48000;
-        format.channels = 2;
-        format.bits_per_sample = 16;
+        ds5_audio_format_init(&format, 48000u, 2u, 16u);
         auto tone = make_tone(format.sample_rate, duration_ms);
         result = ds5_audio_play_pcm(context, endpoint.id, tone.data(), static_cast<uint32_t>(tone.size() * sizeof(int16_t)), &format);
         print_result(result);
@@ -485,11 +476,7 @@ int main(int argc, char** argv) {
     for (const auto& endpoint : endpoints) {
       if (endpoint.is_capture) {
         ds5_audio_format format{};
-        format.size = sizeof(format);
-        format.version = DS5_STRUCT_VERSION;
-        format.sample_rate = 48000;
-        format.channels = 1;
-        format.bits_per_sample = 16;
+        ds5_audio_format_init(&format, 48000u, 1u, 16u);
         std::atomic<uint32_t> captured_bytes{0};
         ds5_audio_capture* capture = nullptr;
         result = ds5_audio_capture_start(context, endpoint.id, &format, capture_callback, &captured_bytes, &capture);

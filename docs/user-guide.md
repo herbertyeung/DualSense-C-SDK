@@ -46,14 +46,15 @@ The C API is declared in `include/dualsense/dualsense.h`.
 | Area | Main API | Notes |
 | --- | --- | --- |
 | Lifetime | `ds5_init`, `ds5_shutdown` | Create one context, then shut it down when all devices and audio captures are finished. |
-| Logging/errors | `ds5_set_log_callback`, `ds5_get_last_error` | Most functions return `ds5_result`; call `ds5_get_last_error` after a failure. |
+| Version/errors | `ds5_get_version`, `ds5_get_version_string`, `ds5_result_to_string`, `ds5_get_last_error` | Query runtime version, map result codes, and read thread-local failure details. |
+| Struct helpers | `ds5_*_init` helpers | Initialize public structs with the correct `size` and `version` before passing them to the SDK. |
 | Discovery | `ds5_enumerate` | First call with `devices = NULL` and `capacity = 0` to obtain the count. |
 | Open/close | `ds5_open`, `ds5_close` | Open a `ds5_device_info` returned by enumeration. |
 | Input | `ds5_poll_state` | Fills `ds5_state` with buttons, sticks, triggers, touch, IMU, battery, transport, and raw report bytes. |
 | Capabilities | `ds5_get_capabilities` | Returns `ds5_capabilities.flags`; check feature flags before enabling UI or gameplay features. |
 | LEDs | `ds5_set_lightbar`, `ds5_set_player_leds`, `ds5_set_mic_led` | Sets lightbar RGB, player LED mask, and mic LED mode. |
 | Rumble/haptics | `ds5_set_rumble`, `ds5_set_haptic_pattern` | Classic rumble and a timed haptic helper. |
-| Adaptive triggers | `ds5_set_trigger_effect` | Supports off, constant resistance, section resistance, weapon, and vibration modes. |
+| Adaptive triggers | `ds5_trigger_effect_*`, `ds5_set_trigger_effect` | Build off, constant resistance, section resistance, weapon, and vibration effects, then send them to L2 or R2. |
 | Raw reports | `ds5_send_raw_output_report` | Advanced escape hatch for protocol experiments. |
 | Audio | `ds5_audio_enumerate_endpoints`, `ds5_audio_play_pcm`, `ds5_audio_capture_start`, `ds5_audio_capture_stop` | Uses explicit Windows audio endpoint IDs and does not change the system default audio device. |
 
@@ -62,16 +63,19 @@ The C++ wrapper is declared in `include/dualsense/dualsense.hpp`.
 - `DualSense::Context` owns `ds5_context`.
 - `DualSense::Controller` owns `ds5_device`.
 - `DualSense::Error` is thrown when a wrapped C call fails.
+- `DualSense::runtimeVersion()` and `DualSense::runtimeVersionString()` expose runtime SDK version details.
 - `Controller::haptics()` exposes `rumble` and `pattern`.
 - `Controller::triggers()` exposes `setEffect`, `setResistance`, and `off`.
-- The wrapper also exposes lightbar, player LEDs, mic LED, raw output, capabilities, state polling, and feedback reset helpers.
+- The wrapper also exposes lightbar, player LEDs, mic LED, raw output, capabilities, capability checks, state polling, audio endpoint enumeration/playback, capture lifetime, and feedback reset helpers.
 
-For C structs that contain `size` and `version`, initialize both before passing the struct to the library:
+For C structs that contain `size` and `version`, prefer the SDK initializer helpers before passing the struct to the library:
 
 ```c
-state.size = sizeof(state);
-state.version = DS5_STRUCT_VERSION;
+ds5_state state;
+ds5_state_init(&state);
 ```
+
+The SDK validates `version == DS5_STRUCT_VERSION` for public input structs. This catches stale bindings and partially initialized structs early.
 
 ### Minimal C Example
 
@@ -278,14 +282,15 @@ C API 声明在 `include/dualsense/dualsense.h`。
 | 范围 | 主要 API | 说明 |
 | --- | --- | --- |
 | 生命周期 | `ds5_init`, `ds5_shutdown` | 创建一个 context；所有设备和音频采集结束后再关闭。 |
-| 日志/错误 | `ds5_set_log_callback`, `ds5_get_last_error` | 大多数函数返回 `ds5_result`；失败后调用 `ds5_get_last_error` 获取说明。 |
+| 版本/错误 | `ds5_get_version`, `ds5_get_version_string`, `ds5_result_to_string`, `ds5_get_last_error` | 查询运行时版本、转换结果码，并读取当前线程最近一次失败说明。 |
+| 结构体辅助 | `ds5_*_init` helpers | 调用 SDK 前用 helper 初始化 public struct 的 `size` 和 `version`。 |
 | 发现设备 | `ds5_enumerate` | 先用 `devices = NULL`、`capacity = 0` 调一次获得数量。 |
 | 打开/关闭 | `ds5_open`, `ds5_close` | 打开枚举返回的 `ds5_device_info`。 |
 | 输入 | `ds5_poll_state` | 填充 `ds5_state`，包含按钮、摇杆、扳机、触摸、IMU、电量、传输类型和原始 report。 |
 | 能力 | `ds5_get_capabilities` | 返回 `ds5_capabilities.flags`；启用 UI 或玩法特性前应检查能力标记。 |
 | 灯光 | `ds5_set_lightbar`, `ds5_set_player_leds`, `ds5_set_mic_led` | 设置光条 RGB、玩家灯 mask、麦克风灯模式。 |
 | 震动/触觉 | `ds5_set_rumble`, `ds5_set_haptic_pattern` | 经典 rumble 和一个按时长播放的 haptic 辅助函数。 |
-| 自适应扳机 | `ds5_set_trigger_effect` | 支持关闭、恒定阻力、区间阻力、武器感、震动等模式。 |
+| 自适应扳机 | `ds5_trigger_effect_*`, `ds5_set_trigger_effect` | 先构造关闭、恒定阻力、区间阻力、武器感或震动 effect，再发送到 L2 或 R2。 |
 | 原始 report | `ds5_send_raw_output_report` | 给协议实验使用的高级逃生口。 |
 | 音频 | `ds5_audio_enumerate_endpoints`, `ds5_audio_play_pcm`, `ds5_audio_capture_start`, `ds5_audio_capture_stop` | 使用明确的 Windows 音频 endpoint id，不会修改系统默认音频设备。 |
 
@@ -294,16 +299,19 @@ C++ 封装声明在 `include/dualsense/dualsense.hpp`。
 - `DualSense::Context` 持有 `ds5_context`。
 - `DualSense::Controller` 持有 `ds5_device`。
 - 被封装的 C 调用失败时抛出 `DualSense::Error`。
+- `DualSense::runtimeVersion()` 和 `DualSense::runtimeVersionString()` 暴露运行时 SDK 版本。
 - `Controller::haptics()` 提供 `rumble` 和 `pattern`。
 - `Controller::triggers()` 提供 `setEffect`、`setResistance` 和 `off`。
-- 这层封装还提供光条、玩家灯、麦克风灯、raw output、能力查询、状态轮询和反馈复位辅助函数。
+- 这层封装还提供光条、玩家灯、麦克风灯、raw output、能力查询、能力检查、状态轮询、音频 endpoint 枚举/播放、采集生命周期和反馈复位辅助函数。
 
-带有 `size` 和 `version` 的 C 结构体，在传给库之前都要初始化这两个字段：
+带有 `size` 和 `version` 的 C 结构体，在传给库之前优先用 SDK initializer helper 初始化：
 
 ```c
-state.size = sizeof(state);
-state.version = DS5_STRUCT_VERSION;
+ds5_state state;
+ds5_state_init(&state);
 ```
+
+SDK 会校验 public input struct 的 `version == DS5_STRUCT_VERSION`，这样可以更早发现过期 binding 或未完整初始化的结构体。
 
 ### 最小 C 示例
 

@@ -16,16 +16,69 @@
 
 static void test_abi_structs_are_versioned() {
   ds5_device_info info{};
-  info.size = sizeof(info);
-  info.version = DS5_STRUCT_VERSION;
+  ds5_device_info_init(&info);
   assert(info.size == sizeof(ds5_device_info));
   assert(info.version == 1u);
+  assert(info.capabilities.size == sizeof(ds5_capabilities));
+  assert(info.capabilities.version == 1u);
 
   ds5_state state{};
-  state.size = sizeof(state);
-  state.version = DS5_STRUCT_VERSION;
+  ds5_state_init(&state);
   assert(state.size == sizeof(ds5_state));
+  assert(state.version == 1u);
+  assert(state.dpad == DS5_DPAD_NONE);
   assert(state.raw_report_size == 0u);
+}
+
+static void test_public_helpers_report_version_and_results() {
+  uint32_t major = 99;
+  uint32_t minor = 99;
+  uint32_t patch = 99;
+  ds5_get_version(&major, &minor, &patch);
+  assert(major == DS5_VERSION_MAJOR);
+  assert(minor == DS5_VERSION_MINOR);
+  assert(patch == DS5_VERSION_PATCH);
+  assert(std::strcmp(ds5_get_version_string(), DS5_VERSION_STRING) == 0);
+  assert(std::strcmp(ds5_result_to_string(DS5_OK), "DS5_OK") == 0);
+  assert(std::strcmp(ds5_result_to_string(static_cast<ds5_result>(-999)), "DS5_E_UNKNOWN") == 0);
+}
+
+static void test_public_trigger_builders() {
+  ds5_trigger_effect effect{};
+  ds5_trigger_effect_constant_resistance(&effect, 12, 180);
+  assert(effect.mode == DS5_TRIGGER_EFFECT_CONSTANT_RESISTANCE);
+  assert(effect.start_position == 12);
+  assert(effect.force == 180);
+
+  ds5_trigger_effect_section_resistance(&effect, 4, 18, 160);
+  assert(effect.mode == DS5_TRIGGER_EFFECT_SECTION_RESISTANCE);
+  assert(effect.start_position == 4);
+  assert(effect.end_position == 18);
+  assert(effect.force == 160);
+
+  ds5_trigger_effect_weapon(&effect, 3, 9, 220);
+  assert(effect.mode == DS5_TRIGGER_EFFECT_WEAPON);
+  assert(effect.end_position == 9);
+
+  ds5_trigger_effect_vibration(&effect, 2, 20, 200, 33);
+  assert(effect.mode == DS5_TRIGGER_EFFECT_VIBRATION);
+  assert(effect.frequency == 33);
+
+  ds5_trigger_effect_off(&effect);
+  assert(effect.mode == DS5_TRIGGER_EFFECT_OFF);
+  assert(effect.force == 0);
+}
+
+static void test_public_struct_version_is_enforced() {
+  ds5_context context{};
+  ds5_device device{};
+  device.context = &context;
+  device.info.capabilities = ds5_internal_capabilities_for_transport(DS5_TRANSPORT_USB);
+
+  ds5_capabilities caps{};
+  ds5_capabilities_init(&caps);
+  caps.version = DS5_STRUCT_VERSION + 1u;
+  assert(ds5_get_capabilities(&device, &caps) == DS5_E_INVALID_ARGUMENT);
 }
 
 static void test_capabilities_for_usb_are_full_featured() {
@@ -669,6 +722,9 @@ static void test_motion_calibrates_static_gyro_bias() {
 
 int main() {
   test_abi_structs_are_versioned();
+  test_public_helpers_report_version_and_results();
+  test_public_trigger_builders();
+  test_public_struct_version_is_enforced();
   test_capabilities_for_usb_are_full_featured();
   test_capabilities_for_bluetooth_are_reduced();
   test_usb_input_report_parser();

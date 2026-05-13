@@ -243,8 +243,7 @@ ds5_result ds5_audio_enumerate_endpoints(ds5_context* context, ds5_audio_endpoin
       }
 
       ds5_audio_endpoint endpoint{};
-      endpoint.size = sizeof(endpoint);
-      endpoint.version = DS5_STRUCT_VERSION;
+      ds5_audio_endpoint_init(&endpoint);
       endpoint.is_capture = flow == eCapture ? 1u : 0u;
       copy_string(endpoint.id, sizeof(endpoint.id), endpoint_id(device.get()));
       copy_string(endpoint.name, sizeof(endpoint.name), name);
@@ -257,6 +256,10 @@ ds5_result ds5_audio_enumerate_endpoints(ds5_context* context, ds5_audio_endpoin
     return found.empty() ? DS5_OK : DS5_E_INSUFFICIENT_BUFFER;
   }
   for (size_t i = 0; i < found.size(); ++i) {
+    if (!ds5_validate_struct(endpoints[i].size, endpoints[i].version, sizeof(ds5_audio_endpoint))) {
+      ds5_set_last_error_message("ds5_audio_enumerate_endpoints received an uninitialized endpoint entry");
+      return DS5_E_INVALID_ARGUMENT;
+    }
     endpoints[i] = found[i];
   }
   return DS5_OK;
@@ -266,6 +269,10 @@ ds5_result ds5_audio_play_pcm(ds5_context* context, const char* endpoint_id_valu
   (void)context;
   if (!pcm || bytes == 0u) {
     ds5_set_last_error_message("ds5_audio_play_pcm requires PCM data");
+    return DS5_E_INVALID_ARGUMENT;
+  }
+  if (format && !ds5_validate_struct(format->size, format->version, sizeof(ds5_audio_format))) {
+    ds5_set_last_error_message("ds5_audio_play_pcm received an uninitialized audio format");
     return DS5_E_INVALID_ARGUMENT;
   }
 
@@ -396,13 +403,16 @@ ds5_result ds5_audio_capture_start(ds5_context* context, const char* endpoint_id
     ds5_set_last_error_message("ds5_audio_capture_start requires callback and capture output");
     return DS5_E_INVALID_ARGUMENT;
   }
+  if (preferred_format && !ds5_validate_struct(preferred_format->size, preferred_format->version, sizeof(ds5_audio_format))) {
+    ds5_set_last_error_message("ds5_audio_capture_start received an uninitialized audio format");
+    return DS5_E_INVALID_ARGUMENT;
+  }
 
   ds5_audio_format callback_format{};
-  callback_format.size = sizeof(callback_format);
-  callback_format.version = DS5_STRUCT_VERSION;
-  callback_format.sample_rate = preferred_format && preferred_format->sample_rate ? preferred_format->sample_rate : 48000;
-  callback_format.channels = preferred_format && preferred_format->channels ? preferred_format->channels : 1;
-  callback_format.bits_per_sample = preferred_format && preferred_format->bits_per_sample ? preferred_format->bits_per_sample : 16;
+  ds5_audio_format_init(&callback_format,
+                        preferred_format && preferred_format->sample_rate ? preferred_format->sample_rate : 48000u,
+                        preferred_format && preferred_format->channels ? preferred_format->channels : 1u,
+                        preferred_format && preferred_format->bits_per_sample ? preferred_format->bits_per_sample : 16u);
 
   auto* state = new ds5_audio_capture();
   state->running = true;

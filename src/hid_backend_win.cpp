@@ -120,8 +120,7 @@ ds5_result ds5_enumerate(ds5_context* context, ds5_device_info* devices, uint32_
     const bool attributes_ok = HidD_GetAttributes(handle, &attributes) != FALSE;
     if (attributes_ok && attributes.VendorID == kSonyVid && is_supported_pid(attributes.ProductID)) {
       ds5_device_info info{};
-      info.size = sizeof(info);
-      info.version = DS5_STRUCT_VERSION;
+      ds5_device_info_init(&info);
       info.vendor_id = attributes.VendorID;
       info.product_id = attributes.ProductID;
       info.transport = transport_from_path(path);
@@ -142,13 +141,17 @@ ds5_result ds5_enumerate(ds5_context* context, ds5_device_info* devices, uint32_
   }
 
   for (size_t i = 0; i < found.size(); ++i) {
+    if (!ds5_validate_struct(devices[i].size, devices[i].version, sizeof(ds5_device_info))) {
+      ds5_set_last_error_message("ds5_enumerate received an uninitialized ds5_device_info entry");
+      return DS5_E_INVALID_ARGUMENT;
+    }
     devices[i] = found[i];
   }
   return DS5_OK;
 }
 
 ds5_result ds5_open(ds5_context* context, const ds5_device_info* info, ds5_device** device) {
-  if (!context || !info || !device) {
+  if (!context || !info || !device || !ds5_validate_struct(info->size, info->version, sizeof(ds5_device_info))) {
     ds5_set_last_error_message("ds5_open received invalid arguments");
     return DS5_E_INVALID_ARGUMENT;
   }
@@ -180,7 +183,7 @@ ds5_result ds5_open(ds5_context* context, const ds5_device_info* info, ds5_devic
 }
 
 ds5_result ds5_poll_state(ds5_device* device, ds5_state* state) {
-  if (!device || !state || !ds5_validate_struct(state->size, sizeof(ds5_state))) {
+  if (!device || !state || !ds5_validate_struct(state->size, state->version, sizeof(ds5_state))) {
     ds5_set_last_error_message("ds5_poll_state received invalid arguments");
     return DS5_E_INVALID_ARGUMENT;
   }

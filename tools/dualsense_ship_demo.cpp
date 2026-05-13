@@ -822,8 +822,7 @@ void try_find_speaker_endpoint(DemoApp& app) {
   if (result != DS5_OK && result != DS5_E_INSUFFICIENT_BUFFER) return;
   std::vector<ds5_audio_endpoint> endpoints(count);
   for (auto& endpoint : endpoints) {
-    endpoint.size = sizeof(endpoint);
-    endpoint.version = DS5_STRUCT_VERSION;
+    ds5_audio_endpoint_init(&endpoint);
   }
   if (count == 0 || ds5_audio_enumerate_endpoints(app.ds_context.native(), endpoints.data(), count, &count) != DS5_OK) return;
   for (const auto& endpoint : endpoints) {
@@ -867,8 +866,7 @@ void initialize_feedback_zones(DemoApp& app) {
 void play_system_tone(DemoApp& app, float frequency, uint32_t duration_ms) {
   if (app.speaker_endpoint_id.empty()) return;
   ds5_audio_format format{};
-  format.size = sizeof(format);
-  format.version = DS5_STRUCT_VERSION;
+  ds5_audio_format_init(&format, 48000u, 2u, 16u);
   format.sample_rate = 48000;
   format.channels = 2;
   format.bits_per_sample = 16;
@@ -915,8 +913,7 @@ bool load_wav_pcm16(const char* path, std::vector<uint8_t>& pcm, ds5_audio_forma
   }
   if (audio_format != 1 || channels == 0 || sample_rate == 0 || bits != 16 || data_offset == 0 || data_size == 0) return false;
   pcm.assign(data.begin() + data_offset, data.begin() + data_offset + data_size);
-  format.size = sizeof(format);
-  format.version = DS5_STRUCT_VERSION;
+  ds5_audio_format_init(&format, 0, 0, 0);
   format.sample_rate = sample_rate;
   format.channels = channels;
   format.bits_per_sample = bits;

@@ -26,8 +26,7 @@ int main(void) {
       return 1;
     }
     for (unsigned int i = 0; i < count; ++i) {
-      devices[i].size = sizeof(ds5_device_info);
-      devices[i].version = DS5_STRUCT_VERSION;
+      ds5_device_info_init(&devices[i]);
     }
     result = ds5_enumerate(context, devices, count, &count);
     if (result == DS5_OK) {
@@ -36,10 +35,8 @@ int main(void) {
       if (result == DS5_OK) {
         ds5_capabilities caps;
         ds5_state state;
-        caps.size = sizeof(caps);
-        caps.version = DS5_STRUCT_VERSION;
-        state.size = sizeof(state);
-        state.version = DS5_STRUCT_VERSION;
+        ds5_capabilities_init(&caps);
+        ds5_state_init(&state);
         if (ds5_get_capabilities(device, &caps) == DS5_OK) {
           printf("Capabilities: 0x%08x\n", caps.flags);
         }

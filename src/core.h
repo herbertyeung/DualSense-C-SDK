@@ -28,7 +28,7 @@ void ds5_set_last_error_message(const std::string& message);
 void ds5_log(ds5_context* context, int level, const std::string& message);
 std::string ds5_wide_to_utf8(const wchar_t* value);
 std::wstring ds5_utf8_to_wide(const char* value);
-bool ds5_validate_struct(uint32_t size, uint32_t minimum_size);
+bool ds5_validate_struct(uint32_t size, uint32_t version, uint32_t minimum_size);
 ds5_result ds5_write_current_output(ds5_device* device);
 
 #endif

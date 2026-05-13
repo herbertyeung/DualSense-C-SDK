@@ -20,6 +20,22 @@ inline void throwIfFailed(ds5_result result) {
   }
 }
 
+struct Version {
+  uint32_t major;
+  uint32_t minor;
+  uint32_t patch;
+};
+
+inline Version runtimeVersion() {
+  Version version{};
+  ds5_get_version(&version.major, &version.minor, &version.patch);
+  return version;
+}
+
+inline std::string runtimeVersionString() {
+  return ds5_get_version_string();
+}
+
 class Context {
  public:
   Context() {
@@ -56,16 +72,77 @@ class Context {
     }
     std::vector<ds5_device_info> devices(count);
     for (auto& device : devices) {
-      device.size = sizeof(device);
-      device.version = DS5_STRUCT_VERSION;
+      ds5_device_info_init(&device);
     }
     throwIfFailed(ds5_enumerate(context_, devices.data(), count, &count));
     devices.resize(count);
     return devices;
   }
 
+  std::vector<ds5_audio_endpoint> audioEndpoints() const {
+    uint32_t count = 0;
+    ds5_result result = ds5_audio_enumerate_endpoints(context_, nullptr, 0, &count);
+    if (result != DS5_OK && result != DS5_E_INSUFFICIENT_BUFFER) {
+      throwIfFailed(result);
+    }
+    std::vector<ds5_audio_endpoint> endpoints(count);
+    for (auto& endpoint : endpoints) {
+      ds5_audio_endpoint_init(&endpoint);
+    }
+    throwIfFailed(ds5_audio_enumerate_endpoints(context_, endpoints.data(), count, &count));
+    endpoints.resize(count);
+    return endpoints;
+  }
+
+  void playPcm(const std::string& endpointId, const void* pcm, uint32_t bytes, const ds5_audio_format& format) const {
+    throwIfFailed(ds5_audio_play_pcm(context_, endpointId.empty() ? nullptr : endpointId.c_str(), pcm, bytes, &format));
+  }
+
  private:
   ds5_context* context_{nullptr};
+};
+
+class AudioCapture {
+ public:
+  AudioCapture() = default;
+
+  AudioCapture(Context& context,
+               const std::string& endpointId,
+               const ds5_audio_format& format,
+               ds5_audio_capture_callback callback,
+               void* userData) {
+    throwIfFailed(ds5_audio_capture_start(context.native(),
+                                          endpointId.empty() ? nullptr : endpointId.c_str(),
+                                          &format,
+                                          callback,
+                                          userData,
+                                          &capture_));
+  }
+
+  ~AudioCapture() {
+    ds5_audio_capture_stop(capture_);
+  }
+
+  AudioCapture(const AudioCapture&) = delete;
+  AudioCapture& operator=(const AudioCapture&) = delete;
+
+  AudioCapture(AudioCapture&& other) noexcept : capture_(other.capture_) {
+    other.capture_ = nullptr;
+  }
+
+  AudioCapture& operator=(AudioCapture&& other) noexcept {
+    if (this != &other) {
+      ds5_audio_capture_stop(capture_);
+      capture_ = other.capture_;
+      other.capture_ = nullptr;
+    }
+    return *this;
+  }
+
+  ds5_audio_capture* native() const { return capture_; }
+
+ private:
+  ds5_audio_capture* capture_{nullptr};
 };
 
 class Controller {
@@ -107,18 +184,20 @@ class Controller {
 
   ds5_state state() const {
     ds5_state state{};
-    state.size = sizeof(state);
-    state.version = DS5_STRUCT_VERSION;
+    ds5_state_init(&state);
     throwIfFailed(ds5_poll_state(device_, &state));
     return state;
   }
 
   ds5_capabilities capabilities() const {
     ds5_capabilities capabilities{};
-    capabilities.size = sizeof(capabilities);
-    capabilities.version = DS5_STRUCT_VERSION;
+    ds5_capabilities_init(&capabilities);
     throwIfFailed(ds5_get_capabilities(device_, &capabilities));
     return capabilities;
+  }
+
+  bool hasCapability(ds5_capability_flags capability) const {
+    return (capabilities().flags & static_cast<uint32_t>(capability)) != 0u;
   }
 
   class Haptics {
@@ -136,15 +215,32 @@ class Controller {
     void setEffect(bool left, const ds5_trigger_effect& effect) const {
       throwIfFailed(ds5_set_trigger_effect(device_, left ? 1u : 0u, &effect));
     }
-    void setResistance(bool left, uint8_t start, uint8_t force) const {
+    static ds5_trigger_effect constantResistance(uint8_t start, uint8_t force) {
       ds5_trigger_effect effect{};
-      effect.mode = DS5_TRIGGER_EFFECT_CONSTANT_RESISTANCE;
-      effect.start_position = start;
-      effect.force = force;
-      setEffect(left, effect);
+      ds5_trigger_effect_constant_resistance(&effect, start, force);
+      return effect;
+    }
+    static ds5_trigger_effect sectionResistance(uint8_t start, uint8_t end, uint8_t force) {
+      ds5_trigger_effect effect{};
+      ds5_trigger_effect_section_resistance(&effect, start, end, force);
+      return effect;
+    }
+    static ds5_trigger_effect weapon(uint8_t start, uint8_t end, uint8_t force) {
+      ds5_trigger_effect effect{};
+      ds5_trigger_effect_weapon(&effect, start, end, force);
+      return effect;
+    }
+    static ds5_trigger_effect vibration(uint8_t start, uint8_t end, uint8_t force, uint8_t frequency) {
+      ds5_trigger_effect effect{};
+      ds5_trigger_effect_vibration(&effect, start, end, force, frequency);
+      return effect;
+    }
+    void setResistance(bool left, uint8_t start, uint8_t force) const {
+      setEffect(left, constantResistance(start, force));
     }
     void off(bool left) const {
       ds5_trigger_effect effect{};
+      ds5_trigger_effect_off(&effect);
       setEffect(left, effect);
     }
     void off() const {
@@ -171,6 +267,7 @@ class Controller {
   }
   void resetFeedback() const {
     ds5_trigger_effect off{};
+    ds5_trigger_effect_off(&off);
     throwIfFailed(ds5_set_trigger_effect(device_, 1u, &off));
     throwIfFailed(ds5_set_trigger_effect(device_, 0u, &off));
     throwIfFailed(ds5_set_rumble(device_, 0, 0));
