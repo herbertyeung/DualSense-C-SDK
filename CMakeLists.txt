@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(dualsense_sdk VERSION 0.1.0 LANGUAGES C CXX)
+project(dualsense_sdk VERSION 0.2.0 LANGUAGES C CXX)
 
 option(DS5_BUILD_SHARED "Build dualsense shared library" ON)
 option(DS5_BUILD_TESTS "Build dualsense tests" ON)
@@ -41,12 +41,14 @@ endif()
 
 if(DS5_BUILD_SHARED)
   add_library(dualsense SHARED $<TARGET_OBJECTS:dualsense_objects>)
+  set_target_properties(dualsense PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
   target_include_directories(dualsense
     PUBLIC
       $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
       $<INSTALL_INTERFACE:include>
   )
   target_compile_definitions(dualsense PRIVATE DS5_BUILDING_DLL UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
+  target_compile_definitions(dualsense INTERFACE DS5_USE_DLL)
   target_link_libraries(dualsense PRIVATE hid setupapi ole32 uuid)
 endif()
 
@@ -85,11 +87,16 @@ if(DS5_BUILD_TESTS)
   add_test(NAME dualsense_tests COMMAND dualsense_tests)
 endif()
 
+include(CMakePackageConfigHelpers)
 include(GNUInstallDirs)
+
+set(DS5_CMAKE_INSTALL_DIR ${CMAKE_INSTALL_LIBDIR}/cmake/dualsense)
+
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(TARGETS dualsense_static
   EXPORT dualsenseTargets
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+  INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 if(DS5_BUILD_SHARED)
   install(TARGETS dualsense
@@ -97,10 +104,30 @@ if(DS5_BUILD_SHARED)
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
   )
 endif()
+install(DIRECTORY docs/ DESTINATION ${CMAKE_INSTALL_DOCDIR})
+install(DIRECTORY samples/ DESTINATION ${CMAKE_INSTALL_DATADIR}/dualsense/samples)
+install(FILES README.md CHANGELOG.md DESTINATION ${CMAKE_INSTALL_DOCDIR})
 install(EXPORT dualsenseTargets
-  FILE dualsenseTargets.cmake
+  FILE DualSenseTargets.cmake
   NAMESPACE DualSense::
-  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/dualsense
+  DESTINATION ${DS5_CMAKE_INSTALL_DIR}
+)
+
+configure_package_config_file(
+  cmake/dualsenseConfig.cmake.in
+  ${CMAKE_CURRENT_BINARY_DIR}/DualSenseConfig.cmake
+  INSTALL_DESTINATION ${DS5_CMAKE_INSTALL_DIR}
+)
+write_basic_package_version_file(
+  ${CMAKE_CURRENT_BINARY_DIR}/DualSenseConfigVersion.cmake
+  VERSION ${PROJECT_VERSION}
+  COMPATIBILITY SameMinorVersion
+)
+install(FILES
+  ${CMAKE_CURRENT_BINARY_DIR}/DualSenseConfig.cmake
+  ${CMAKE_CURRENT_BINARY_DIR}/DualSenseConfigVersion.cmake
+  DESTINATION ${DS5_CMAKE_INSTALL_DIR}
 )

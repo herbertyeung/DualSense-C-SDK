@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Added installed CMake package files for `find_package(DualSense CONFIG REQUIRED)`.
+- Added an external CMake consumer example under `examples/cmake-consumer`.
+- Expanded the C# P/Invoke sample to enumerate, open, poll with timeout, and reset feedback.
+- Added packaging and downstream consumption documentation.
+
 ## 0.2.0
 
 - Added bounded input polling with `ds5_poll_state_timeout`.

@@ -1,0 +1,15 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+include("${CMAKE_CURRENT_LIST_DIR}/DualSenseTargets.cmake")
+
+if(TARGET DualSense::dualsense)
+  set(DualSense_SHARED_TARGET DualSense::dualsense)
+endif()
+
+if(TARGET DualSense::dualsense_static)
+  set(DualSense_STATIC_TARGET DualSense::dualsense_static)
+endif()
+
+set(DualSense_VERSION "@PROJECT_VERSION@")
