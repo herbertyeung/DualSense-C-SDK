@@ -48,12 +48,32 @@ Run the main output API test:
 .\build-vs2026\Debug\dualsense_diag.exe --test
 ```
 
+### Use From Another CMake Project
+
+Install the SDK, then point `CMAKE_PREFIX_PATH` at the install prefix:
+
+```powershell
+cmake --install build-vs2026 --config Debug --prefix C:\SDKs\DualSense
+cmake -S examples\cmake-consumer -B build-consumer -DCMAKE_PREFIX_PATH=C:\SDKs\DualSense
+cmake --build build-consumer --config Debug
+```
+
+In a downstream project:
+
+```cmake
+find_package(DualSense CONFIG REQUIRED)
+target_link_libraries(my_app PRIVATE DualSense::dualsense_static)
+```
+
 ### Documentation
 
 - `docs/user-guide.md`: build, API overview, feature matrix, diagnostics, and hardware notes.
 - `docs/protocol-notes.md`: current USB/Bluetooth/HID/audio scope.
 - `docs/ship-demo-test-steps.md`: DirectX demo verification steps.
 - `docs/productization-plan.md`: current product-readiness assessment and development plan.
+- `docs/packaging.md`: install layout and downstream CMake consumption.
+- `docs/known-limitations.md`: current transport, audio, firmware, runtime, and testing limits.
+- `docs/release-checklist.md`: build, package, consumer, and USB hardware release checks.
 - `CHANGELOG.md`: public SDK version history.
 
 ### Productization Status
@@ -108,10 +128,30 @@ ctest --test-dir build-vs2026 -C Debug --output-on-failure
 .\build-vs2026\Debug\dualsense_diag.exe --test
 ```
 
+### 在其它 CMake 项目中使用
+
+先安装 SDK，再让下游项目通过 `CMAKE_PREFIX_PATH` 找到安装目录：
+
+```powershell
+cmake --install build-vs2026 --config Debug --prefix C:\SDKs\DualSense
+cmake -S examples\cmake-consumer -B build-consumer -DCMAKE_PREFIX_PATH=C:\SDKs\DualSense
+cmake --build build-consumer --config Debug
+```
+
+下游项目中：
+
+```cmake
+find_package(DualSense CONFIG REQUIRED)
+target_link_libraries(my_app PRIVATE DualSense::dualsense_static)
+```
+
 ### 文档
 
 - `docs/user-guide.md`：构建、API 概览、功能矩阵、诊断命令和硬件说明。
 - `docs/protocol-notes.md`：当前 USB/Bluetooth/HID/audio 范围。
 - `docs/ship-demo-test-steps.md`：DirectX demo 验证步骤。
 - `docs/productization-plan.md`：当前产品化评估和开发完善计划。
+- `docs/packaging.md`：安装目录结构和下游 CMake 集成方式。
+- `docs/known-limitations.md`：当前传输、音频、固件、运行时和测试限制。
+- `docs/release-checklist.md`：构建、打包、consumer 和 USB 硬件发布检查。
 - `CHANGELOG.md`：公开 SDK 版本历史。

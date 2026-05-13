@@ -1,6 +1,9 @@
-#include <cassert>
 #include <cstring>
+#include <exception>
 #include <iostream>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
 #include <dualsense/dualsense.h>
 
@@ -13,6 +16,42 @@
 #include "../tools/ship_controls.h"
 #include "../tools/ship_feedback.h"
 #include "../tools/ship_systems.h"
+#include "../tools/wav_pcm.h"
+
+namespace {
+
+class TestFailure : public std::runtime_error {
+ public:
+  explicit TestFailure(const std::string& message) : std::runtime_error(message) {}
+};
+
+const char* g_current_test = "<none>";
+
+void expect(bool condition, const char* expression, const char* file, int line) {
+  if (condition) {
+    return;
+  }
+
+  std::string message = "FAILED ";
+  message += g_current_test;
+  message += ": ";
+  message += expression;
+  message += " at ";
+  message += file;
+  message += ":";
+  message += std::to_string(line);
+  throw TestFailure(message);
+}
+
+void run_test(const char* name, void (*test)()) {
+  g_current_test = name;
+  test();
+  std::cout << "PASS " << name << "\n";
+}
+
+}  // namespace
+
+#define assert(expression) expect((expression), #expression, __FILE__, __LINE__)
 
 static void test_abi_structs_are_versioned() {
   ds5_device_info info{};
@@ -324,6 +363,16 @@ static void test_touchpad_parser_decodes_two_fingers() {
   assert(state.touch[1].id == 6u);
   assert(state.touch[1].x == 0xabcu);
   assert(state.touch[1].y == 0xde0u);
+}
+
+static void test_wav_pcm_loader_reads_commander_asset() {
+  std::vector<uint8_t> pcm;
+  ds5_audio_format format{};
+  assert(ds5_tool_load_wav_pcm16("assets/commander_ready.wav", pcm, format));
+  assert(!pcm.empty());
+  assert(format.sample_rate == 48000u);
+  assert(format.channels == 2u);
+  assert(format.bits_per_sample == 16u);
 }
 
 static void test_ship_controls_map_dualsense_state_and_move_forward() {
@@ -665,6 +714,18 @@ static void test_target_lock_selects_target_inside_angle_and_distance() {
   assert(ds5_demo_find_lock_target(pose, targets, config) == 0);
 }
 
+static void test_target_lock_filters_close_targets_outside_angle() {
+  ShipControlConfig config{};
+  config.autoFollowMaxDistance = 100.0f;
+  config.targetLockAngle = 20.0f;
+  ShipPose pose{};
+  std::vector<ShipTarget> targets = {
+      {1, 8.0f, 0.0f, 0.0f, true},
+      {2, 0.0f, 0.0f, 40.0f, true},
+  };
+  assert(ds5_demo_find_lock_target(pose, targets, config) == 1);
+}
+
 static void test_auto_follow_adds_assist_without_overriding_player() {
   ShipControlConfig config{};
   config.autoFollowStrength = 0.25f;
@@ -779,48 +840,56 @@ static void test_motion_calibrates_static_gyro_bias() {
 }
 
 int main() {
-  test_abi_structs_are_versioned();
-  test_public_helpers_report_version_and_results();
-  test_public_trigger_builders();
-  test_public_struct_version_is_enforced();
-  test_poll_timeout_validates_arguments();
-  test_reset_feedback_clears_cached_output_before_transport_check();
-  test_reset_feedback_rejects_null_device();
-  test_reset_feedback_output_encoding_is_clear();
-  test_capabilities_for_usb_are_full_featured();
-  test_capabilities_for_bluetooth_are_reduced();
-  test_usb_input_report_parser();
-  test_bluetooth_short_input_report_parser();
-  test_bluetooth_output_reports_are_rejected_before_io();
-  test_output_report_builder_light_rumble_trigger();
-  test_output_report_builder_encodes_all_public_trigger_modes();
-  test_touchpad_parser_decodes_two_fingers();
-  test_ship_controls_map_dualsense_state_and_move_forward();
-  test_left_stick_right_strafes_ship_without_yawing();
-  test_left_stick_down_moves_ship_backward();
-  test_r2_only_fires_and_does_not_throttle_ship();
-  test_r2_light_bullet_threshold_uses_raw_trigger();
-  test_light_bullet_spawns_from_ship_nose();
-  test_light_bullets_move_and_expire();
-  test_ship_moves_along_heading_not_pitch();
-  test_left_stick_forward_uses_view_pitch_for_vertical_flight();
-  test_r2_thrust_uses_view_pitch_for_forward_flight();
-  test_neutral_view_pitch_keeps_left_stick_level();
-  test_engine_flame_only_when_flying_forward();
-  test_camera_recenters_behind_ship_when_moving_without_manual_camera();
-  test_camera_follow_lags_behind_direct_ship_movement();
-  test_ship_feedback_increases_right_trigger_force_with_speed();
-  test_ship_feedback_uses_light_rumble_and_near_zero_idle();
-  test_r2_boost_feedback_is_stronger_than_cruise();
-  test_ship_feedback_increases_left_trigger_force_with_brake();
-  test_trigger_mode_cycles_and_changes_r2_behavior();
-  test_r2_auto_fire_trigger_uses_vibration_effect();
-  test_feedback_zones_detect_pose_and_change_feedback();
-  test_target_lock_selects_target_inside_angle_and_distance();
-  test_auto_follow_adds_assist_without_overriding_player();
-  test_motion_control_roll_and_dodge_can_be_disabled();
-  test_motion_axis_mapping_is_configurable();
-  test_motion_calibrates_static_gyro_bias();
+  try {
+    run_test("abi_structs_are_versioned", test_abi_structs_are_versioned);
+    run_test("public_helpers_report_version_and_results", test_public_helpers_report_version_and_results);
+    run_test("public_trigger_builders", test_public_trigger_builders);
+    run_test("public_struct_version_is_enforced", test_public_struct_version_is_enforced);
+    run_test("poll_timeout_validates_arguments", test_poll_timeout_validates_arguments);
+    run_test("reset_feedback_clears_cached_output_before_transport_check", test_reset_feedback_clears_cached_output_before_transport_check);
+    run_test("reset_feedback_rejects_null_device", test_reset_feedback_rejects_null_device);
+    run_test("reset_feedback_output_encoding_is_clear", test_reset_feedback_output_encoding_is_clear);
+    run_test("capabilities_for_usb_are_full_featured", test_capabilities_for_usb_are_full_featured);
+    run_test("capabilities_for_bluetooth_are_reduced", test_capabilities_for_bluetooth_are_reduced);
+    run_test("usb_input_report_parser", test_usb_input_report_parser);
+    run_test("bluetooth_short_input_report_parser", test_bluetooth_short_input_report_parser);
+    run_test("bluetooth_output_reports_are_rejected_before_io", test_bluetooth_output_reports_are_rejected_before_io);
+    run_test("output_report_builder_light_rumble_trigger", test_output_report_builder_light_rumble_trigger);
+    run_test("output_report_builder_encodes_all_public_trigger_modes", test_output_report_builder_encodes_all_public_trigger_modes);
+    run_test("touchpad_parser_decodes_two_fingers", test_touchpad_parser_decodes_two_fingers);
+    run_test("wav_pcm_loader_reads_commander_asset", test_wav_pcm_loader_reads_commander_asset);
+    run_test("ship_controls_map_dualsense_state_and_move_forward", test_ship_controls_map_dualsense_state_and_move_forward);
+    run_test("left_stick_right_strafes_ship_without_yawing", test_left_stick_right_strafes_ship_without_yawing);
+    run_test("left_stick_down_moves_ship_backward", test_left_stick_down_moves_ship_backward);
+    run_test("r2_only_fires_and_does_not_throttle_ship", test_r2_only_fires_and_does_not_throttle_ship);
+    run_test("r2_light_bullet_threshold_uses_raw_trigger", test_r2_light_bullet_threshold_uses_raw_trigger);
+    run_test("light_bullet_spawns_from_ship_nose", test_light_bullet_spawns_from_ship_nose);
+    run_test("light_bullets_move_and_expire", test_light_bullets_move_and_expire);
+    run_test("ship_moves_along_heading_not_pitch", test_ship_moves_along_heading_not_pitch);
+    run_test("left_stick_forward_uses_view_pitch_for_vertical_flight", test_left_stick_forward_uses_view_pitch_for_vertical_flight);
+    run_test("r2_thrust_uses_view_pitch_for_forward_flight", test_r2_thrust_uses_view_pitch_for_forward_flight);
+    run_test("neutral_view_pitch_keeps_left_stick_level", test_neutral_view_pitch_keeps_left_stick_level);
+    run_test("engine_flame_only_when_flying_forward", test_engine_flame_only_when_flying_forward);
+    run_test("camera_recenters_behind_ship_when_moving_without_manual_camera", test_camera_recenters_behind_ship_when_moving_without_manual_camera);
+    run_test("camera_follow_lags_behind_direct_ship_movement", test_camera_follow_lags_behind_direct_ship_movement);
+    run_test("ship_feedback_increases_right_trigger_force_with_speed", test_ship_feedback_increases_right_trigger_force_with_speed);
+    run_test("ship_feedback_uses_light_rumble_and_near_zero_idle", test_ship_feedback_uses_light_rumble_and_near_zero_idle);
+    run_test("r2_boost_feedback_is_stronger_than_cruise", test_r2_boost_feedback_is_stronger_than_cruise);
+    run_test("ship_feedback_increases_left_trigger_force_with_brake", test_ship_feedback_increases_left_trigger_force_with_brake);
+    run_test("trigger_mode_cycles_and_changes_r2_behavior", test_trigger_mode_cycles_and_changes_r2_behavior);
+    run_test("r2_auto_fire_trigger_uses_vibration_effect", test_r2_auto_fire_trigger_uses_vibration_effect);
+    run_test("feedback_zones_detect_pose_and_change_feedback", test_feedback_zones_detect_pose_and_change_feedback);
+    run_test("target_lock_selects_target_inside_angle_and_distance", test_target_lock_selects_target_inside_angle_and_distance);
+    run_test("target_lock_filters_close_targets_outside_angle", test_target_lock_filters_close_targets_outside_angle);
+    run_test("auto_follow_adds_assist_without_overriding_player", test_auto_follow_adds_assist_without_overriding_player);
+    run_test("motion_control_roll_and_dodge_can_be_disabled", test_motion_control_roll_and_dodge_can_be_disabled);
+    run_test("motion_axis_mapping_is_configurable", test_motion_axis_mapping_is_configurable);
+    run_test("motion_calibrates_static_gyro_bias", test_motion_calibrates_static_gyro_bias);
+  } catch (const std::exception& error) {
+    std::cerr << error.what() << "\n";
+    return 1;
+  }
+
   std::cout << "dualsense_tests passed\n";
   return 0;
 }

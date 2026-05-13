@@ -26,6 +26,7 @@
 #include "ship_feedback.h"
 #include "glb_loader.h"
 #include "ship_systems.h"
+#include "wav_pcm.h"
 
 using Microsoft::WRL::ComPtr;
 using namespace DirectX;
@@ -85,6 +86,9 @@ struct DemoApp {
   std::vector<ShipTarget> targets;
   std::vector<ShipBullet> bullets;
   std::vector<ShipFeedbackZone> feedback_zones;
+  std::vector<Vertex> zone_vertices;
+  std::vector<Vertex> flame_vertices;
+  std::vector<Vertex> bullet_vertices;
   ShipFeedbackZoneKind active_zone = ShipFeedbackZoneKind::None;
   int locked_target = -1;
   bool auto_follow = false;
@@ -610,8 +614,8 @@ void draw_vertices(DemoApp& app, ID3D11Buffer* vertices, UINT vertex_count, D3D1
   app.context->Draw(vertex_count, 0);
 }
 
-std::vector<Vertex> build_light_bullet_vertices(const std::vector<ShipBullet>& bullets) {
-  std::vector<Vertex> vertices;
+void build_light_bullet_vertices(const std::vector<ShipBullet>& bullets, std::vector<Vertex>& vertices) {
+  vertices.clear();
   vertices.reserve(bullets.size() * 6u);
   for (const ShipBullet& bullet : bullets) {
     const float len = std::max(0.001f, std::sqrt(bullet.vx * bullet.vx + bullet.vy * bullet.vy + bullet.vz * bullet.vz));
@@ -633,12 +637,12 @@ std::vector<Vertex> build_light_bullet_vertices(const std::vector<ShipBullet>& b
     vertices.push_back({{tail.x + side, tail.y, tail.z}, normal, {0, 0}, glow});
     vertices.push_back({{head.x + side, head.y, head.z}, normal, {0, 0}, glow});
   }
-  return vertices;
 }
 
-std::vector<Vertex> build_engine_flame_vertices(const ShipPose& head_pose, float intensity, float time) {
-  std::vector<Vertex> vertices;
-  if (intensity <= 0.02f) return vertices;
+void build_engine_flame_vertices(const ShipPose& head_pose, float intensity, float time, std::vector<Vertex>& vertices) {
+  vertices.clear();
+  if (intensity <= 0.02f) return;
+  vertices.reserve(10u);
 
   const float cp = std::cos(head_pose.pitch);
   const float fx = std::sin(head_pose.yaw) * cp;
@@ -678,7 +682,6 @@ std::vector<Vertex> build_engine_flame_vertices(const ShipPose& head_pose, float
   vertices.push_back({{glow_end.x, glow_end.y + up * 0.25f, glow_end.z}, normal, {0, 0}, core});
   vertices.push_back({{engine.x, engine.y - up, engine.z}, normal, {0, 0}, core});
   vertices.push_back({{glow_end.x, glow_end.y - up * 0.25f, glow_end.z}, normal, {0, 0}, core});
-  return vertices;
 }
 
 XMFLOAT3 feedback_zone_color(ShipFeedbackZoneKind kind) {
@@ -695,8 +698,8 @@ void add_line(std::vector<Vertex>& vertices, const XMFLOAT3& a, const XMFLOAT3& 
   vertices.push_back({b, normal, {0, 0}, color});
 }
 
-std::vector<Vertex> build_feedback_zone_vertices(const std::vector<ShipFeedbackZone>& zones, ShipFeedbackZoneKind active_zone) {
-  std::vector<Vertex> vertices;
+void build_feedback_zone_vertices(const std::vector<ShipFeedbackZone>& zones, ShipFeedbackZoneKind active_zone, std::vector<Vertex>& vertices) {
+  vertices.clear();
   vertices.reserve(zones.size() * 24u);
   for (const ShipFeedbackZone& zone : zones) {
     XMFLOAT3 color = feedback_zone_color(zone.kind);
@@ -733,7 +736,6 @@ std::vector<Vertex> build_feedback_zone_vertices(const std::vector<ShipFeedbackZ
     add_line(vertices, p100, p110, color);
     add_line(vertices, p101, p111, color);
   }
-  return vertices;
 }
 
 void render(DemoApp& app) {
@@ -768,11 +770,11 @@ void render(DemoApp& app) {
 
   draw_vertices(app, app.grid_vertices.Get(), app.grid_vertex_count, D3D11_PRIMITIVE_TOPOLOGY_LINELIST, grid_model * view * proj, grid_model);
 
-  std::vector<Vertex> zone_vertices = build_feedback_zone_vertices(app.feedback_zones, app.active_zone);
-  if (!zone_vertices.empty()) {
-    ComPtr<ID3D11Buffer> zone_buffer = create_buffer(app.device.Get(), zone_vertices, D3D11_BIND_VERTEX_BUFFER);
+  build_feedback_zone_vertices(app.feedback_zones, app.active_zone, app.zone_vertices);
+  if (!app.zone_vertices.empty()) {
+    ComPtr<ID3D11Buffer> zone_buffer = create_buffer(app.device.Get(), app.zone_vertices, D3D11_BIND_VERTEX_BUFFER);
     XMMATRIX zone_model = XMMatrixIdentity();
-    draw_vertices(app, zone_buffer.Get(), static_cast<UINT>(zone_vertices.size()), D3D11_PRIMITIVE_TOPOLOGY_LINELIST,
+    draw_vertices(app, zone_buffer.Get(), static_cast<UINT>(app.zone_vertices.size()), D3D11_PRIMITIVE_TOPOLOGY_LINELIST,
                   zone_model * view * proj, zone_model);
   }
 
@@ -787,19 +789,19 @@ void render(DemoApp& app) {
   app.context->DrawIndexed(app.ship_index_count, 0, 0);
 
   const float flame_intensity = ds5_demo_engine_flame_intensity(app.pose, app.last_frame.flight);
-  std::vector<Vertex> flame_vertices = build_engine_flame_vertices(ship_head_pose(app), flame_intensity, app.flame_time);
-  if (!flame_vertices.empty()) {
-    ComPtr<ID3D11Buffer> flame_buffer = create_buffer(app.device.Get(), flame_vertices, D3D11_BIND_VERTEX_BUFFER);
+  build_engine_flame_vertices(ship_head_pose(app), flame_intensity, app.flame_time, app.flame_vertices);
+  if (!app.flame_vertices.empty()) {
+    ComPtr<ID3D11Buffer> flame_buffer = create_buffer(app.device.Get(), app.flame_vertices, D3D11_BIND_VERTEX_BUFFER);
     XMMATRIX flame_model = XMMatrixIdentity();
-    draw_vertices(app, flame_buffer.Get(), static_cast<UINT>(flame_vertices.size()), D3D11_PRIMITIVE_TOPOLOGY_LINELIST,
+    draw_vertices(app, flame_buffer.Get(), static_cast<UINT>(app.flame_vertices.size()), D3D11_PRIMITIVE_TOPOLOGY_LINELIST,
                   flame_model * view * proj, flame_model);
   }
 
-  std::vector<Vertex> bullet_vertices = build_light_bullet_vertices(app.bullets);
-  if (!bullet_vertices.empty()) {
-    ComPtr<ID3D11Buffer> bullet_buffer = create_buffer(app.device.Get(), bullet_vertices, D3D11_BIND_VERTEX_BUFFER);
+  build_light_bullet_vertices(app.bullets, app.bullet_vertices);
+  if (!app.bullet_vertices.empty()) {
+    ComPtr<ID3D11Buffer> bullet_buffer = create_buffer(app.device.Get(), app.bullet_vertices, D3D11_BIND_VERTEX_BUFFER);
     XMMATRIX bullet_model = XMMatrixIdentity();
-    draw_vertices(app, bullet_buffer.Get(), static_cast<UINT>(bullet_vertices.size()), D3D11_PRIMITIVE_TOPOLOGY_LINELIST,
+    draw_vertices(app, bullet_buffer.Get(), static_cast<UINT>(app.bullet_vertices.size()), D3D11_PRIMITIVE_TOPOLOGY_LINELIST,
                   bullet_model * view * proj, bullet_model);
   }
 
@@ -882,44 +884,6 @@ void play_system_tone(DemoApp& app, float frequency, uint32_t duration_ms) {
                      static_cast<uint32_t>(pcm.size() * sizeof(int16_t)), &format);
 }
 
-bool load_wav_pcm16(const char* path, std::vector<uint8_t>& pcm, ds5_audio_format& format) {
-  std::ifstream file(path, std::ios::binary);
-  if (!file) return false;
-  std::vector<uint8_t> data((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-  if (data.size() < 44 || std::memcmp(data.data(), "RIFF", 4) != 0 || std::memcmp(data.data() + 8, "WAVE", 4) != 0) return false;
-  uint16_t audio_format = 0;
-  uint16_t channels = 0;
-  uint32_t sample_rate = 0;
-  uint16_t bits = 0;
-  size_t cursor = 12;
-  size_t data_offset = 0;
-  uint32_t data_size = 0;
-  while (cursor + 8 <= data.size()) {
-    const char* id = reinterpret_cast<const char*>(data.data() + cursor);
-    uint32_t size = 0;
-    std::memcpy(&size, data.data() + cursor + 4, 4);
-    cursor += 8;
-    if (cursor + size > data.size()) break;
-    if (std::memcmp(id, "fmt ", 4) == 0 && size >= 16) {
-      std::memcpy(&audio_format, data.data() + cursor, 2);
-      std::memcpy(&channels, data.data() + cursor + 2, 2);
-      std::memcpy(&sample_rate, data.data() + cursor + 4, 4);
-      std::memcpy(&bits, data.data() + cursor + 14, 2);
-    } else if (std::memcmp(id, "data", 4) == 0) {
-      data_offset = cursor;
-      data_size = size;
-    }
-    cursor += size + (size & 1u);
-  }
-  if (audio_format != 1 || channels == 0 || sample_rate == 0 || bits != 16 || data_offset == 0 || data_size == 0) return false;
-  pcm.assign(data.begin() + data_offset, data.begin() + data_offset + data_size);
-  ds5_audio_format_init(&format, 0, 0, 0);
-  format.sample_rate = sample_rate;
-  format.channels = channels;
-  format.bits_per_sample = bits;
-  return true;
-}
-
 bool load_commander_ready_wav(std::vector<uint8_t>& pcm, ds5_audio_format& format) {
   const char* relative_paths[] = {
       "assets/commander_ready.wav",
@@ -927,12 +891,12 @@ bool load_commander_ready_wav(std::vector<uint8_t>& pcm, ds5_audio_format& forma
       "../../assets/commander_ready.wav",
   };
   for (const char* path : relative_paths) {
-    if (load_wav_pcm16(path, pcm, format)) return true;
+    if (ds5_tool_load_wav_pcm16(path, pcm, format)) return true;
   }
   const std::string exe_dir = executable_directory();
   if (!exe_dir.empty()) {
     const std::string from_exe = exe_dir + "\\..\\assets\\commander_ready.wav";
-    if (load_wav_pcm16(from_exe.c_str(), pcm, format)) return true;
+    if (ds5_tool_load_wav_pcm16(from_exe.c_str(), pcm, format)) return true;
   }
   return false;
 }

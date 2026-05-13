@@ -211,12 +211,25 @@ inline float ds5_demo_angle_to_target_degrees(const ShipPose& pose, const ShipTa
 inline int ds5_demo_find_lock_target(const ShipPose& pose, const std::vector<ShipTarget>& targets, const ShipControlConfig& config) {
   int best = -1;
   float best_score = 1.0e9f;
+  const float max_distance_sq = config.autoFollowMaxDistance * config.autoFollowMaxDistance;
+  const float cp = std::cos(pose.pitch);
+  const float fx = std::sin(pose.yaw) * cp;
+  const float fy = std::sin(pose.pitch);
+  const float fz = std::cos(pose.yaw) * cp;
+  const float min_dot = std::cos(config.targetLockAngle / 57.2957795f);
   for (size_t i = 0; i < targets.size(); ++i) {
     if (!targets[i].alive) continue;
-    const float distance = ds5_demo_distance_to_target(pose, targets[i]);
-    if (distance > config.autoFollowMaxDistance) continue;
-    const float angle = ds5_demo_angle_to_target_degrees(pose, targets[i]);
-    if (angle > config.targetLockAngle) continue;
+    const float dx = targets[i].x - pose.x;
+    const float dy = targets[i].y - pose.y;
+    const float dz = targets[i].z - pose.z;
+    const float distance_sq = dx * dx + dy * dy + dz * dz;
+    if (distance_sq > max_distance_sq) continue;
+
+    const float distance = std::max(0.001f, std::sqrt(distance_sq));
+    const float dot = ds5_demo_clamp((fx * dx + fy * dy + fz * dz) / distance, -1.0f, 1.0f);
+    if (dot < min_dot) continue;
+
+    const float angle = std::acos(dot) * 57.2957795f;
     const float score = angle * 2.0f + distance * 0.05f;
     if (score < best_score) {
       best_score = score;
@@ -336,13 +349,7 @@ struct ShipMotionControl {
     gyroSteady = false;
   }
 
-  void updateGyroCalibration(const ds5_state& state, const ShipControlConfig& config, float dt) {
-    if (dt <= 0.0f) return;
-    if (!hasStillnessWindow) {
-      resetStillnessWindow(state);
-      return;
-    }
-
+  void updateStillnessWindowRanges(const ds5_state& state) {
     const float gx = static_cast<float>(state.gyro_x);
     const float gy = static_cast<float>(state.gyro_y);
     const float gz = static_cast<float>(state.gyro_z);
@@ -361,9 +368,9 @@ struct ShipMotionControl {
     maxAccelX = std::max(maxAccelX, ax);
     maxAccelY = std::max(maxAccelY, ay);
     maxAccelZ = std::max(maxAccelZ, az);
-    stillnessTime += dt;
-    calibrationTime += dt;
+  }
 
+  bool stillnessWindowIsQuiet(const ShipControlConfig& config) const {
     const bool gyroQuiet =
         (maxGyroX - minGyroX) <= config.gyroStillnessGyroDelta &&
         (maxGyroY - minGyroY) <= config.gyroStillnessGyroDelta &&
@@ -372,19 +379,37 @@ struct ShipMotionControl {
         (maxAccelX - minAccelX) <= config.gyroStillnessAccelDelta &&
         (maxAccelY - minAccelY) <= config.gyroStillnessAccelDelta &&
         (maxAccelZ - minAccelZ) <= config.gyroStillnessAccelDelta;
-    gyroSteady = gyroQuiet && accelQuiet;
+    return gyroQuiet && accelQuiet;
+  }
+
+  void applyStillnessBiasCalibration(const ShipControlConfig& config, float dt, float requiredTime) {
+    const float targetBiasX = (minGyroX + maxGyroX) * 0.5f;
+    const float targetBiasY = (minGyroY + maxGyroY) * 0.5f;
+    const float targetBiasZ = (minGyroZ + maxGyroZ) * 0.5f;
+    const float blend = calibrationConfidence < 0.05f
+                            ? 1.0f
+                            : ds5_demo_clamp(dt * config.gyroBiasLerpSpeed * (0.35f + calibrationConfidence), 0.0f, 1.0f);
+    gyroBiasX += (targetBiasX - gyroBiasX) * blend;
+    gyroBiasY += (targetBiasY - gyroBiasY) * blend;
+    gyroBiasZ += (targetBiasZ - gyroBiasZ) * blend;
+    calibrationConfidence = ds5_demo_clamp(calibrationConfidence + dt / std::max(0.1f, requiredTime), 0.0f, 1.0f);
+  }
+
+  void updateGyroCalibration(const ds5_state& state, const ShipControlConfig& config, float dt) {
+    if (dt <= 0.0f) return;
+    if (!hasStillnessWindow) {
+      resetStillnessWindow(state);
+      return;
+    }
+
+    updateStillnessWindowRanges(state);
+    stillnessTime += dt;
+    calibrationTime += dt;
+
+    gyroSteady = stillnessWindowIsQuiet(config);
     const float requiredTime = calibrationConfidence < 0.2f ? config.gyroCalibrationTime : config.gyroAutoCalibrationTime;
     if (gyroSteady && stillnessTime >= requiredTime) {
-      const float targetBiasX = (minGyroX + maxGyroX) * 0.5f;
-      const float targetBiasY = (minGyroY + maxGyroY) * 0.5f;
-      const float targetBiasZ = (minGyroZ + maxGyroZ) * 0.5f;
-      const float blend = calibrationConfidence < 0.05f
-                              ? 1.0f
-                              : ds5_demo_clamp(dt * config.gyroBiasLerpSpeed * (0.35f + calibrationConfidence), 0.0f, 1.0f);
-      gyroBiasX += (targetBiasX - gyroBiasX) * blend;
-      gyroBiasY += (targetBiasY - gyroBiasY) * blend;
-      gyroBiasZ += (targetBiasZ - gyroBiasZ) * blend;
-      calibrationConfidence = ds5_demo_clamp(calibrationConfidence + dt / std::max(0.1f, requiredTime), 0.0f, 1.0f);
+      applyStillnessBiasCalibration(config, dt, requiredTime);
       resetStillnessWindow(state);
     } else if (!gyroSteady && stillnessTime > 0.2f) {
       resetStillnessWindow(state);

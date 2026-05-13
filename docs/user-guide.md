@@ -39,6 +39,23 @@ Useful build options:
 | `DS5_BUILD_SAMPLES` | `ON` | Builds `c_api_sample` and `cpp_sample`. |
 | `DS5_BUILD_TOOLS` | `ON` | Builds `dualsense_diag` and `dualsense_ship_demo`. |
 
+### Install And Consume
+
+Install the SDK to a prefix:
+
+```powershell
+cmake --install build-vs2026 --config Debug --prefix C:\SDKs\DualSense
+```
+
+Use it from another CMake project:
+
+```cmake
+find_package(DualSense CONFIG REQUIRED)
+target_link_libraries(my_app PRIVATE DualSense::dualsense_static)
+```
+
+See `docs/packaging.md` and `examples/cmake-consumer` for a complete installed-consumer example.
+
 ### API Overview
 
 The C API is declared in `include/dualsense/dualsense.h`.
@@ -274,6 +291,23 @@ ctest --test-dir build-nmake --output-on-failure
 | `DS5_BUILD_TESTS` | `ON` | 构建 `dualsense_tests`。 |
 | `DS5_BUILD_SAMPLES` | `ON` | 构建 `c_api_sample` 和 `cpp_sample`。 |
 | `DS5_BUILD_TOOLS` | `ON` | 构建 `dualsense_diag` 和 `dualsense_ship_demo`。 |
+
+### 安装和下游集成
+
+把 SDK 安装到指定目录：
+
+```powershell
+cmake --install build-vs2026 --config Debug --prefix C:\SDKs\DualSense
+```
+
+在其它 CMake 项目中使用：
+
+```cmake
+find_package(DualSense CONFIG REQUIRED)
+target_link_libraries(my_app PRIVATE DualSense::dualsense_static)
+```
+
+完整示例见 `docs/packaging.md` 和 `examples/cmake-consumer`。
 
 ### API 概览
 
