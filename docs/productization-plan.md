@@ -63,7 +63,7 @@ Estimated readiness:
 
 ### Milestone 1: SDK Boundary Cleanup
 
-Status: partially implemented on 2026-05-13. Runtime version helpers, result-code strings, public struct initializers, trigger builders, C++ wrapper coverage, public header comments, and focused tests have landed. Remaining work in this milestone is mostly around broader binding polish and deciding whether to add context-scoped error buffers.
+Status: partially implemented on 2026-05-13. Runtime version helpers, result-code strings, public struct initializers, trigger builders, C++ wrapper coverage, public header comments, focused tests, and the `0.2.0` version bump have landed. Remaining work in this milestone is mostly around broader binding polish and deciding whether to add context-scoped error buffers.
 
 Goal: make the public surface easier to consume without changing the core design.
 
@@ -90,7 +90,7 @@ Acceptance:
 Goal: remove blocking surprises and make runtime behavior predictable for host apps.
 
 - Add `ds5_poll_state_timeout(device, timeout_ms, state)` or a nonblocking `ds5_try_poll_state`. Status: implemented on 2026-05-13.
-- Consider overlapped HID I/O internally for product builds. Status: implemented for opened runtime HID handles on 2026-05-13.
+- Consider overlapped HID I/O internally for product builds. Status: implemented for opened runtime HID handles on 2026-05-13 using persistent pending input reads.
 - Split enumeration into:
   - discovery info
   - open capability/access result

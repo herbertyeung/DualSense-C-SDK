@@ -28,9 +28,9 @@ extern "C" {
 
 #define DS5_STRUCT_VERSION 1u
 #define DS5_VERSION_MAJOR 0u
-#define DS5_VERSION_MINOR 1u
+#define DS5_VERSION_MINOR 2u
 #define DS5_VERSION_PATCH 0u
-#define DS5_VERSION_STRING "0.1.0"
+#define DS5_VERSION_STRING "0.2.0"
 #define DS5_MAX_PATH 260u
 #define DS5_MAX_NAME 128u
 #define DS5_RAW_REPORT_MAX 128u

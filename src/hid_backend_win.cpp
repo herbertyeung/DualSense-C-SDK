@@ -86,45 +86,77 @@ ds5_result write_report(HANDLE handle, const uint8_t* bytes, uint32_t size) {
   return DS5_OK;
 }
 
-ds5_result read_report_timeout(HANDLE handle, uint32_t timeout_ms, uint8_t* buffer, uint32_t buffer_size, DWORD* read) {
-  if (!buffer || !read) {
-    ds5_set_last_error_message("Invalid DualSense input read buffer");
+ds5_result start_input_read(ds5_device* device) {
+  if (!device || !device->input_event) {
+    ds5_set_last_error_message("DualSense input event is not initialized");
+    return DS5_E_INVALID_ARGUMENT;
+  }
+  if (device->input_read_pending) {
+    return DS5_OK;
+  }
+
+  ResetEvent(device->input_event);
+  std::memset(device->input_buffer, 0, sizeof(device->input_buffer));
+  std::memset(&device->input_overlapped, 0, sizeof(device->input_overlapped));
+  device->input_overlapped.hEvent = device->input_event;
+  device->input_read_size = 0;
+
+  DWORD read = 0;
+  BOOL ok = ReadFile(device->handle, device->input_buffer, sizeof(device->input_buffer), &read, &device->input_overlapped);
+  if (ok) {
+    device->input_read_size = read;
+    return DS5_OK;
+  }
+
+  if (GetLastError() == ERROR_IO_PENDING) {
+    device->input_read_pending = true;
+    return DS5_OK;
+  }
+
+  ds5_set_last_error_message("Failed to start DualSense input report read");
+  return DS5_E_IO;
+}
+
+ds5_result finish_input_read(ds5_device* device, uint32_t timeout_ms, const uint8_t** bytes, DWORD* read) {
+  if (!device || !bytes || !read) {
+    ds5_set_last_error_message("Invalid DualSense input read state");
     return DS5_E_INVALID_ARGUMENT;
   }
 
-  OVERLAPPED overlapped{};
-  overlapped.hEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
-  if (!overlapped.hEvent) {
-    ds5_set_last_error_message("Failed to create DualSense input event");
-    return DS5_E_IO;
+  ds5_result result = start_input_read(device);
+  if (result != DS5_OK) {
+    return result;
   }
 
-  *read = 0;
-  BOOL ok = ReadFile(handle, buffer, buffer_size, read, &overlapped);
-  if (!ok && GetLastError() == ERROR_IO_PENDING) {
-    const DWORD wait = WaitForSingleObject(overlapped.hEvent, timeout_ms);
+  if (device->input_read_pending) {
+    const DWORD wait = WaitForSingleObject(device->input_event, timeout_ms);
     if (wait == WAIT_TIMEOUT) {
-      CancelIoEx(handle, &overlapped);
-      GetOverlappedResult(handle, &overlapped, read, TRUE);
-      CloseHandle(overlapped.hEvent);
       ds5_set_last_error_message("Timed out waiting for DualSense input report");
       return DS5_E_TIMEOUT;
     }
     if (wait != WAIT_OBJECT_0) {
-      CancelIoEx(handle, &overlapped);
-      GetOverlappedResult(handle, &overlapped, read, TRUE);
-      CloseHandle(overlapped.hEvent);
       ds5_set_last_error_message("Failed while waiting for DualSense input report");
       return DS5_E_IO;
     }
-    ok = GetOverlappedResult(handle, &overlapped, read, FALSE);
+    DWORD completed = 0;
+    if (!GetOverlappedResult(device->handle, &device->input_overlapped, &completed, FALSE)) {
+      device->input_read_pending = false;
+      device->input_read_size = 0;
+      ds5_set_last_error_message("Failed to complete DualSense input report read");
+      return DS5_E_IO;
+    }
+    device->input_read_size = completed;
+    device->input_read_pending = false;
   }
 
-  CloseHandle(overlapped.hEvent);
-  if (!ok) {
+  if (device->input_read_size == 0u) {
     ds5_set_last_error_message("Failed to read DualSense input report");
     return DS5_E_IO;
   }
+
+  *bytes = device->input_buffer;
+  *read = device->input_read_size;
+  device->input_read_size = 0;
   return DS5_OK;
 }
 
@@ -233,6 +265,13 @@ ds5_result ds5_open(ds5_context* context, const ds5_device_info* info, ds5_devic
   opened->context = context;
   opened->handle = handle;
   opened->info = *info;
+  opened->input_event = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+  if (!opened->input_event) {
+    CloseHandle(handle);
+    delete opened;
+    ds5_set_last_error_message("Failed to create DualSense input event");
+    return DS5_E_IO;
+  }
   *device = opened;
   return DS5_OK;
 }
@@ -247,10 +286,18 @@ ds5_result ds5_poll_state_timeout(ds5_device* device, uint32_t timeout_ms, ds5_s
     return DS5_E_INVALID_ARGUMENT;
   }
 
-  uint8_t buffer[DS5_RAW_REPORT_MAX]{};
+  const uint8_t* buffer = nullptr;
   DWORD read = 0;
-  std::lock_guard<std::mutex> lock(device->input_mutex);
-  ds5_result result = read_report_timeout(device->handle, timeout_ms, buffer, sizeof(buffer), &read);
+  std::unique_lock<std::mutex> lock(device->input_mutex, std::defer_lock);
+  if (timeout_ms == 0u) {
+    if (!lock.try_lock()) {
+      ds5_set_last_error_message("DualSense input read is already pending on another thread");
+      return DS5_E_TIMEOUT;
+    }
+  } else {
+    lock.lock();
+  }
+  ds5_result result = finish_input_read(device, timeout_ms, &buffer, &read);
   if (result != DS5_OK) {
     return result;
   }

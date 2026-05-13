@@ -29,6 +29,11 @@ struct ds5_device {
   ds5_output_state output{};
   std::mutex mutex;
   std::mutex input_mutex;
+  HANDLE input_event = nullptr;
+  OVERLAPPED input_overlapped{};
+  uint8_t input_buffer[DS5_RAW_REPORT_MAX]{};
+  DWORD input_read_size = 0;
+  bool input_read_pending = false;
 };
 
 void ds5_set_last_error_message(const std::string& message);

@@ -204,6 +204,19 @@ void ds5_close(ds5_device* device) {
   if (!device) {
     return;
   }
+  {
+    std::lock_guard<std::mutex> lock(device->input_mutex);
+    if (device->input_read_pending) {
+      CancelIoEx(device->handle, &device->input_overlapped);
+      DWORD ignored = 0;
+      GetOverlappedResult(device->handle, &device->input_overlapped, &ignored, TRUE);
+      device->input_read_pending = false;
+    }
+    if (device->input_event) {
+      CloseHandle(device->input_event);
+      device->input_event = nullptr;
+    }
+  }
   if (device->handle != INVALID_HANDLE_VALUE) {
     CloseHandle(device->handle);
   }
