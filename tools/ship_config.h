@@ -1,3 +1,9 @@
+/*
+  File: ship_config.h
+  Author: Herbert Yeung
+  Purpose: Ship demo control configuration loading declarations.
+*/
+
 #ifndef DS5_SHIP_CONFIG_H
 #define DS5_SHIP_CONFIG_H
 

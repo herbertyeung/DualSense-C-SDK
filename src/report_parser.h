@@ -1,3 +1,9 @@
+/*
+  File: report_parser.h
+  Author: Herbert Yeung
+  Purpose: Internal DualSense HID input report parser declarations.
+*/
+
 #ifndef DS5_REPORT_PARSER_H
 #define DS5_REPORT_PARSER_H
 

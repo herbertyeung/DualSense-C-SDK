@@ -1,3 +1,9 @@
+/*
+  File: output_report.h
+  Author: Herbert Yeung
+  Purpose: Internal DualSense USB output report state and builder declarations.
+*/
+
 #ifndef DS5_OUTPUT_REPORT_H
 #define DS5_OUTPUT_REPORT_H
 

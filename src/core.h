@@ -1,3 +1,9 @@
+/*
+  File: core.h
+  Author: Herbert Yeung
+  Purpose: Internal context, device, error, and shared utility declarations.
+*/
+
 #ifndef DS5_CORE_H
 #define DS5_CORE_H
 

@@ -1,3 +1,9 @@
+/*
+  File: glb_loader.h
+  Author: Herbert Yeung
+  Purpose: Minimal GLB mesh loader declarations for the DirectX ship demo.
+*/
+
 #ifndef DS5_GLB_LOADER_H
 #define DS5_GLB_LOADER_H
 

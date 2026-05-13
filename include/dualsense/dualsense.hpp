@@ -1,3 +1,9 @@
+/*
+  File: dualsense.hpp
+  Author: Herbert Yeung
+  Purpose: C++ RAII wrapper for the DualSense C SDK.
+*/
+
 #ifndef DUALSENSE_DUALSENSE_HPP
 #define DUALSENSE_DUALSENSE_HPP
 

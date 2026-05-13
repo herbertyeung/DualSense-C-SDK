@@ -1,3 +1,9 @@
+/*
+  File: dualsense.h
+  Author: Herbert Yeung
+  Purpose: Public C ABI for the Windows DualSense SDK.
+*/
+
 #ifndef DUALSENSE_DUALSENSE_H
 #define DUALSENSE_DUALSENSE_H
 
