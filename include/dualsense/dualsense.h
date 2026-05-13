@@ -1,3 +1,9 @@
+/*
+  File: dualsense.h
+  Author: Herbert Yeung
+  Purpose: Public C ABI for the Windows DualSense SDK.
+*/
+
 #ifndef DUALSENSE_DUALSENSE_H
 #define DUALSENSE_DUALSENSE_H
 
@@ -22,9 +28,9 @@ extern "C" {
 
 #define DS5_STRUCT_VERSION 1u
 #define DS5_VERSION_MAJOR 0u
-#define DS5_VERSION_MINOR 1u
+#define DS5_VERSION_MINOR 2u
 #define DS5_VERSION_PATCH 0u
-#define DS5_VERSION_STRING "0.1.0"
+#define DS5_VERSION_STRING "0.2.0"
 #define DS5_MAX_PATH 260u
 #define DS5_MAX_NAME 128u
 #define DS5_RAW_REPORT_MAX 128u
@@ -68,7 +74,8 @@ typedef enum ds5_result {
   DS5_E_DEVICE_CAPABILITY = -7,
   DS5_E_INSUFFICIENT_BUFFER = -8,
   DS5_E_AUDIO = -9,
-  DS5_E_NOT_IMPLEMENTED = -10
+  DS5_E_NOT_IMPLEMENTED = -10,
+  DS5_E_TIMEOUT = -11
 } ds5_result;
 
 typedef enum ds5_transport {
@@ -295,6 +302,10 @@ DS5_API void ds5_close(ds5_device* device);
 DS5_API ds5_result ds5_get_capabilities(ds5_device* device, ds5_capabilities* capabilities);
 /* Blocking read of the next input report. Use from a polling/input thread, not a latency-sensitive UI callback. */
 DS5_API ds5_result ds5_poll_state(ds5_device* device, ds5_state* state);
+/* Reads the next input report, waiting at most `timeout_ms`. Returns DS5_E_TIMEOUT when no report arrives in time. */
+DS5_API ds5_result ds5_poll_state_timeout(ds5_device* device, uint32_t timeout_ms, ds5_state* state);
+/* Nonblocking input poll. Returns DS5_E_TIMEOUT when no input report is ready immediately. */
+DS5_API ds5_result ds5_try_poll_state(ds5_device* device, ds5_state* state);
 
 /* Output APIs are implemented for USB transport in v1 and return DS5_E_UNSUPPORTED_TRANSPORT for Bluetooth. */
 /* Sets the RGB lightbar color. */
@@ -309,6 +320,8 @@ DS5_API ds5_result ds5_set_rumble(ds5_device* device, uint8_t left, uint8_t righ
 DS5_API ds5_result ds5_set_haptic_pattern(ds5_device* device, uint8_t left, uint8_t right, uint32_t duration_ms);
 /* Sets one adaptive trigger effect. Pass left_trigger != 0 for L2, 0 for R2. */
 DS5_API ds5_result ds5_set_trigger_effect(ds5_device* device, uint32_t left_trigger, const ds5_trigger_effect* effect);
+/* Clears rumble, adaptive triggers, and mic LED with one output report. */
+DS5_API ds5_result ds5_reset_feedback(ds5_device* device);
 /* Advanced USB-only escape hatch for callers that need to experiment with HID output reports directly. */
 DS5_API ds5_result ds5_send_raw_output_report(ds5_device* device, const void* bytes, uint32_t size);
 

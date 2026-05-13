@@ -1,3 +1,9 @@
+/*
+  File: core.h
+  Author: Herbert Yeung
+  Purpose: Internal context, device, error, and shared utility declarations.
+*/
+
 #ifndef DS5_CORE_H
 #define DS5_CORE_H
 
@@ -22,6 +28,12 @@ struct ds5_device {
   ds5_device_info info{};
   ds5_output_state output{};
   std::mutex mutex;
+  std::mutex input_mutex;
+  HANDLE input_event = nullptr;
+  OVERLAPPED input_overlapped{};
+  uint8_t input_buffer[DS5_RAW_REPORT_MAX]{};
+  DWORD input_read_size = 0;
+  bool input_read_pending = false;
 };
 
 void ds5_set_last_error_message(const std::string& message);

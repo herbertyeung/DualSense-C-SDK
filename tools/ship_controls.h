@@ -1,3 +1,9 @@
+/*
+  File: ship_controls.h
+  Author: Herbert Yeung
+  Purpose: Ship demo input mapping helpers for DualSense and fallback controls.
+*/
+
 #ifndef DS5_SHIP_CONTROLS_H
 #define DS5_SHIP_CONTROLS_H
 

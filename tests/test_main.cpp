@@ -40,6 +40,7 @@ static void test_public_helpers_report_version_and_results() {
   assert(patch == DS5_VERSION_PATCH);
   assert(std::strcmp(ds5_get_version_string(), DS5_VERSION_STRING) == 0);
   assert(std::strcmp(ds5_result_to_string(DS5_OK), "DS5_OK") == 0);
+  assert(std::strcmp(ds5_result_to_string(DS5_E_TIMEOUT), "DS5_E_TIMEOUT") == 0);
   assert(std::strcmp(ds5_result_to_string(static_cast<ds5_result>(-999)), "DS5_E_UNKNOWN") == 0);
 }
 
@@ -79,6 +80,63 @@ static void test_public_struct_version_is_enforced() {
   ds5_capabilities_init(&caps);
   caps.version = DS5_STRUCT_VERSION + 1u;
   assert(ds5_get_capabilities(&device, &caps) == DS5_E_INVALID_ARGUMENT);
+}
+
+static void test_poll_timeout_validates_arguments() {
+  ds5_state state{};
+  ds5_state_init(&state);
+  assert(ds5_poll_state_timeout(nullptr, 0, &state) == DS5_E_INVALID_ARGUMENT);
+
+  ds5_context context{};
+  ds5_device device{};
+  device.context = &context;
+  state.version = DS5_STRUCT_VERSION + 1u;
+  assert(ds5_try_poll_state(&device, &state) == DS5_E_INVALID_ARGUMENT);
+}
+
+static void test_reset_feedback_clears_cached_output_before_transport_check() {
+  ds5_context context{};
+  ds5_device device{};
+  device.context = &context;
+  device.info.transport = DS5_TRANSPORT_BLUETOOTH;
+  device.output.left_rumble = 20;
+  device.output.right_rumble = 30;
+  device.output.mic_led = DS5_MIC_LED_ON;
+  ds5_trigger_effect_constant_resistance(&device.output.left_trigger, 12, 100);
+  ds5_trigger_effect_vibration(&device.output.right_trigger, 4, 20, 180, 30);
+
+  assert(ds5_reset_feedback(&device) == DS5_E_UNSUPPORTED_TRANSPORT);
+  assert(device.output.left_rumble == 0);
+  assert(device.output.right_rumble == 0);
+  assert(device.output.mic_led == DS5_MIC_LED_OFF);
+  assert(device.output.left_trigger.mode == DS5_TRIGGER_EFFECT_OFF);
+  assert(device.output.right_trigger.mode == DS5_TRIGGER_EFFECT_OFF);
+}
+
+static void test_reset_feedback_rejects_null_device() {
+  assert(ds5_reset_feedback(nullptr) == DS5_E_INVALID_ARGUMENT);
+}
+
+static void test_reset_feedback_output_encoding_is_clear() {
+  ds5_output_state output{};
+  output.left_rumble = 99;
+  output.right_rumble = 88;
+  output.mic_led = DS5_MIC_LED_ON;
+  ds5_trigger_effect_constant_resistance(&output.left_trigger, 12, 100);
+  ds5_trigger_effect_vibration(&output.right_trigger, 4, 20, 180, 30);
+
+  output.left_rumble = 0;
+  output.right_rumble = 0;
+  output.mic_led = DS5_MIC_LED_OFF;
+  ds5_trigger_effect_off(&output.left_trigger);
+  ds5_trigger_effect_off(&output.right_trigger);
+
+  ds5_internal_output_report report = ds5_internal_build_usb_output_report(&output);
+  assert(report.bytes[3] == 0);
+  assert(report.bytes[4] == 0);
+  assert(report.bytes[9] == DS5_MIC_LED_OFF);
+  assert(report.bytes[11] == DS5_TRIGGER_EFFECT_OFF);
+  assert(report.bytes[22] == DS5_TRIGGER_EFFECT_OFF);
 }
 
 static void test_capabilities_for_usb_are_full_featured() {
@@ -725,6 +783,10 @@ int main() {
   test_public_helpers_report_version_and_results();
   test_public_trigger_builders();
   test_public_struct_version_is_enforced();
+  test_poll_timeout_validates_arguments();
+  test_reset_feedback_clears_cached_output_before_transport_check();
+  test_reset_feedback_rejects_null_device();
+  test_reset_feedback_output_encoding_is_clear();
   test_capabilities_for_usb_are_full_featured();
   test_capabilities_for_bluetooth_are_reduced();
   test_usb_input_report_parser();

@@ -54,6 +54,7 @@ Run the main output API test:
 - `docs/protocol-notes.md`: current USB/Bluetooth/HID/audio scope.
 - `docs/ship-demo-test-steps.md`: DirectX demo verification steps.
 - `docs/productization-plan.md`: current product-readiness assessment and development plan.
+- `CHANGELOG.md`: public SDK version history.
 
 ### Productization Status
 
@@ -113,3 +114,4 @@ ctest --test-dir build-vs2026 -C Debug --output-on-failure
 - `docs/protocol-notes.md`：当前 USB/Bluetooth/HID/audio 范围。
 - `docs/ship-demo-test-steps.md`：DirectX demo 验证步骤。
 - `docs/productization-plan.md`：当前产品化评估和开发完善计划。
+- `CHANGELOG.md`：公开 SDK 版本历史。

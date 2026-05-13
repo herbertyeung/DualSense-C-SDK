@@ -1,3 +1,9 @@
+/*
+  File: ship_systems.h
+  Author: Herbert Yeung
+  Purpose: Ship demo movement, camera, target, projectile, and motion systems.
+*/
+
 #ifndef DS5_SHIP_SYSTEMS_H
 #define DS5_SHIP_SYSTEMS_H
 

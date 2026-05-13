@@ -372,11 +372,7 @@ int main(int argc, char** argv) {
         std::this_thread::sleep_for(std::chrono::milliseconds(220));
       }
 
-      ds5_trigger_effect off{};
-      print_result(ds5_set_trigger_effect(device, 1, &off));
-      print_result(ds5_set_trigger_effect(device, 0, &off));
-      print_result(ds5_set_rumble(device, 0, 0));
-      print_result(ds5_set_mic_led(device, DS5_MIC_LED_OFF));
+      print_result(ds5_reset_feedback(device));
       ds5_close(device);
     }
   }
@@ -405,7 +401,67 @@ int main(int argc, char** argv) {
       for (uint32_t i = 0; i < frames; ++i) {
         ds5_state state{};
         ds5_state_init(&state);
-        result = ds5_poll_state(device, &state);
+        result = ds5_poll_state_timeout(device, 1000u, &state);
+        if (result == DS5_E_TIMEOUT) {
+          std::cout << "poll timeout waiting for input report\n";
+          continue;
+        }
+        if (result != DS5_OK) {
+          print_result(result);
+          break;
+        }
+        print_state_line(state);
+      }
+      ds5_close(device);
+    }
+  }
+
+  if (argc > 1 && std::string(argv[1]) == "--poll-timeout") {
+    uint32_t frames = 180;
+    uint32_t timeout_ms = 16;
+    if (argc > 2) {
+      frames = static_cast<uint32_t>(std::max(1, std::stoi(argv[2])));
+    }
+    if (argc > 3) {
+      timeout_ms = static_cast<uint32_t>(std::max(0, std::stoi(argv[3])));
+    }
+    ds5_device* device = nullptr;
+    if (open_first_device(context, devices, &device)) {
+      std::cout << "Polling with " << timeout_ms << "ms timeout for " << frames << " attempts.\n";
+      for (uint32_t i = 0; i < frames; ++i) {
+        ds5_state state{};
+        ds5_state_init(&state);
+        result = ds5_poll_state_timeout(device, timeout_ms, &state);
+        if (result == DS5_E_TIMEOUT) {
+          std::cout << "timeout\n";
+          continue;
+        }
+        if (result != DS5_OK) {
+          print_result(result);
+          break;
+        }
+        print_state_line(state);
+      }
+      ds5_close(device);
+    }
+  }
+
+  if (argc > 1 && std::string(argv[1]) == "--try-poll") {
+    uint32_t frames = 180;
+    if (argc > 2) {
+      frames = static_cast<uint32_t>(std::max(1, std::stoi(argv[2])));
+    }
+    ds5_device* device = nullptr;
+    if (open_first_device(context, devices, &device)) {
+      std::cout << "Trying nonblocking poll for " << frames << " attempts.\n";
+      for (uint32_t i = 0; i < frames; ++i) {
+        ds5_state state{};
+        ds5_state_init(&state);
+        result = ds5_try_poll_state(device, &state);
+        if (result == DS5_E_TIMEOUT) {
+          std::cout << "not ready\n";
+          continue;
+        }
         if (result != DS5_OK) {
           print_result(result);
           break;

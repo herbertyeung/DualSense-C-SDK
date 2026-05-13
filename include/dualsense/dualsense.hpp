@@ -1,3 +1,9 @@
+/*
+  File: dualsense.hpp
+  Author: Herbert Yeung
+  Purpose: C++ RAII wrapper for the DualSense C SDK.
+*/
+
 #ifndef DUALSENSE_DUALSENSE_HPP
 #define DUALSENSE_DUALSENSE_HPP
 
@@ -189,6 +195,23 @@ class Controller {
     return state;
   }
 
+  ds5_state state(uint32_t timeoutMs) const {
+    ds5_state state{};
+    ds5_state_init(&state);
+    throwIfFailed(ds5_poll_state_timeout(device_, timeoutMs, &state));
+    return state;
+  }
+
+  bool tryState(ds5_state& state) const {
+    ds5_state_init(&state);
+    ds5_result result = ds5_try_poll_state(device_, &state);
+    if (result == DS5_E_TIMEOUT) {
+      return false;
+    }
+    throwIfFailed(result);
+    return true;
+  }
+
   ds5_capabilities capabilities() const {
     ds5_capabilities capabilities{};
     ds5_capabilities_init(&capabilities);
@@ -266,12 +289,7 @@ class Controller {
     throwIfFailed(ds5_send_raw_output_report(device_, bytes, size));
   }
   void resetFeedback() const {
-    ds5_trigger_effect off{};
-    ds5_trigger_effect_off(&off);
-    throwIfFailed(ds5_set_trigger_effect(device_, 1u, &off));
-    throwIfFailed(ds5_set_trigger_effect(device_, 0u, &off));
-    throwIfFailed(ds5_set_rumble(device_, 0, 0));
-    throwIfFailed(ds5_set_mic_led(device_, DS5_MIC_LED_OFF));
+    throwIfFailed(ds5_reset_feedback(device_));
   }
 
  private:

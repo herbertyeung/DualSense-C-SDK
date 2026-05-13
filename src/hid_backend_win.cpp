@@ -65,11 +65,98 @@ std::string serial_string(HANDLE handle) {
 }
 
 ds5_result write_report(HANDLE handle, const uint8_t* bytes, uint32_t size) {
+  OVERLAPPED overlapped{};
+  overlapped.hEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+  if (!overlapped.hEvent) {
+    ds5_set_last_error_message("Failed to create DualSense output event");
+    return DS5_E_IO;
+  }
+
   DWORD written = 0;
-  if (!WriteFile(handle, bytes, size, &written, nullptr) || written != size) {
+  BOOL ok = WriteFile(handle, bytes, size, &written, &overlapped);
+  if (!ok && GetLastError() == ERROR_IO_PENDING) {
+    ok = GetOverlappedResult(handle, &overlapped, &written, TRUE);
+  }
+  CloseHandle(overlapped.hEvent);
+
+  if (!ok || written != size) {
     ds5_set_last_error_message("Failed to write DualSense output report");
     return DS5_E_IO;
   }
+  return DS5_OK;
+}
+
+ds5_result start_input_read(ds5_device* device) {
+  if (!device || !device->input_event) {
+    ds5_set_last_error_message("DualSense input event is not initialized");
+    return DS5_E_INVALID_ARGUMENT;
+  }
+  if (device->input_read_pending) {
+    return DS5_OK;
+  }
+
+  ResetEvent(device->input_event);
+  std::memset(device->input_buffer, 0, sizeof(device->input_buffer));
+  std::memset(&device->input_overlapped, 0, sizeof(device->input_overlapped));
+  device->input_overlapped.hEvent = device->input_event;
+  device->input_read_size = 0;
+
+  DWORD read = 0;
+  BOOL ok = ReadFile(device->handle, device->input_buffer, sizeof(device->input_buffer), &read, &device->input_overlapped);
+  if (ok) {
+    device->input_read_size = read;
+    return DS5_OK;
+  }
+
+  if (GetLastError() == ERROR_IO_PENDING) {
+    device->input_read_pending = true;
+    return DS5_OK;
+  }
+
+  ds5_set_last_error_message("Failed to start DualSense input report read");
+  return DS5_E_IO;
+}
+
+ds5_result finish_input_read(ds5_device* device, uint32_t timeout_ms, const uint8_t** bytes, DWORD* read) {
+  if (!device || !bytes || !read) {
+    ds5_set_last_error_message("Invalid DualSense input read state");
+    return DS5_E_INVALID_ARGUMENT;
+  }
+
+  ds5_result result = start_input_read(device);
+  if (result != DS5_OK) {
+    return result;
+  }
+
+  if (device->input_read_pending) {
+    const DWORD wait = WaitForSingleObject(device->input_event, timeout_ms);
+    if (wait == WAIT_TIMEOUT) {
+      ds5_set_last_error_message("Timed out waiting for DualSense input report");
+      return DS5_E_TIMEOUT;
+    }
+    if (wait != WAIT_OBJECT_0) {
+      ds5_set_last_error_message("Failed while waiting for DualSense input report");
+      return DS5_E_IO;
+    }
+    DWORD completed = 0;
+    if (!GetOverlappedResult(device->handle, &device->input_overlapped, &completed, FALSE)) {
+      device->input_read_pending = false;
+      device->input_read_size = 0;
+      ds5_set_last_error_message("Failed to complete DualSense input report read");
+      return DS5_E_IO;
+    }
+    device->input_read_size = completed;
+    device->input_read_pending = false;
+  }
+
+  if (device->input_read_size == 0u) {
+    ds5_set_last_error_message("Failed to read DualSense input report");
+    return DS5_E_IO;
+  }
+
+  *bytes = device->input_buffer;
+  *read = device->input_read_size;
+  device->input_read_size = 0;
   return DS5_OK;
 }
 
@@ -162,12 +249,12 @@ ds5_result ds5_open(ds5_context* context, const ds5_device_info* info, ds5_devic
 
   const std::wstring path = ds5_utf8_to_wide(info->path);
   HANDLE handle = CreateFileW(path.c_str(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                              nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+                              nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, nullptr);
   if (handle == INVALID_HANDLE_VALUE && info->transport == DS5_TRANSPORT_BLUETOOTH) {
     // Bluetooth output reports need a transport-specific packet format. Open read-only
     // when Windows refuses write access so input polling still works.
     handle = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
-                         nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+                         nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, nullptr);
   }
   if (handle == INVALID_HANDLE_VALUE) {
     ds5_set_last_error_message("Failed to open DualSense HID device");
@@ -178,23 +265,47 @@ ds5_result ds5_open(ds5_context* context, const ds5_device_info* info, ds5_devic
   opened->context = context;
   opened->handle = handle;
   opened->info = *info;
+  opened->input_event = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+  if (!opened->input_event) {
+    CloseHandle(handle);
+    delete opened;
+    ds5_set_last_error_message("Failed to create DualSense input event");
+    return DS5_E_IO;
+  }
   *device = opened;
   return DS5_OK;
 }
 
 ds5_result ds5_poll_state(ds5_device* device, ds5_state* state) {
+  return ds5_poll_state_timeout(device, INFINITE, state);
+}
+
+ds5_result ds5_poll_state_timeout(ds5_device* device, uint32_t timeout_ms, ds5_state* state) {
   if (!device || !state || !ds5_validate_struct(state->size, state->version, sizeof(ds5_state))) {
-    ds5_set_last_error_message("ds5_poll_state received invalid arguments");
+    ds5_set_last_error_message("ds5_poll_state_timeout received invalid arguments");
     return DS5_E_INVALID_ARGUMENT;
   }
 
-  uint8_t buffer[DS5_RAW_REPORT_MAX]{};
+  const uint8_t* buffer = nullptr;
   DWORD read = 0;
-  if (!ReadFile(device->handle, buffer, sizeof(buffer), &read, nullptr)) {
-    ds5_set_last_error_message("Failed to read DualSense input report");
-    return DS5_E_IO;
+  std::unique_lock<std::mutex> lock(device->input_mutex, std::defer_lock);
+  if (timeout_ms == 0u) {
+    if (!lock.try_lock()) {
+      ds5_set_last_error_message("DualSense input read is already pending on another thread");
+      return DS5_E_TIMEOUT;
+    }
+  } else {
+    lock.lock();
+  }
+  ds5_result result = finish_input_read(device, timeout_ms, &buffer, &read);
+  if (result != DS5_OK) {
+    return result;
   }
   return ds5_internal_parse_input_report(buffer, read, device->info.transport, state);
+}
+
+ds5_result ds5_try_poll_state(ds5_device* device, ds5_state* state) {
+  return ds5_poll_state_timeout(device, 0u, state);
 }
 
 ds5_result ds5_write_current_output(ds5_device* device) {
@@ -258,6 +369,20 @@ ds5_result ds5_set_trigger_effect(ds5_device* device, uint32_t left_trigger, con
   } else {
     device->output.right_trigger = *effect;
   }
+  return ds5_write_current_output(device);
+}
+
+ds5_result ds5_reset_feedback(ds5_device* device) {
+  if (!device) {
+    ds5_set_last_error_message("ds5_reset_feedback received invalid arguments");
+    return DS5_E_INVALID_ARGUMENT;
+  }
+  std::lock_guard<std::mutex> lock(device->mutex);
+  device->output.left_rumble = 0;
+  device->output.right_rumble = 0;
+  device->output.mic_led = DS5_MIC_LED_OFF;
+  ds5_trigger_effect_off(&device->output.left_trigger);
+  ds5_trigger_effect_off(&device->output.right_trigger);
   return ds5_write_current_output(device);
 }
 

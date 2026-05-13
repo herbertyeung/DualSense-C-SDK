@@ -1,3 +1,9 @@
+/*
+  File: ship_feedback.h
+  Author: Herbert Yeung
+  Purpose: Ship demo haptic, rumble, trigger, and audio feedback helpers.
+*/
+
 #ifndef DS5_SHIP_FEEDBACK_H
 #define DS5_SHIP_FEEDBACK_H
 

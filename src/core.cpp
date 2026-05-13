@@ -41,6 +41,7 @@ const char* ds5_result_to_string(ds5_result result) {
     case DS5_E_INSUFFICIENT_BUFFER: return "DS5_E_INSUFFICIENT_BUFFER";
     case DS5_E_AUDIO: return "DS5_E_AUDIO";
     case DS5_E_NOT_IMPLEMENTED: return "DS5_E_NOT_IMPLEMENTED";
+    case DS5_E_TIMEOUT: return "DS5_E_TIMEOUT";
     default: return "DS5_E_UNKNOWN";
   }
 }
@@ -202,6 +203,19 @@ ds5_result ds5_get_capabilities(ds5_device* device, ds5_capabilities* capabiliti
 void ds5_close(ds5_device* device) {
   if (!device) {
     return;
+  }
+  {
+    std::lock_guard<std::mutex> lock(device->input_mutex);
+    if (device->input_read_pending) {
+      CancelIoEx(device->handle, &device->input_overlapped);
+      DWORD ignored = 0;
+      GetOverlappedResult(device->handle, &device->input_overlapped, &ignored, TRUE);
+      device->input_read_pending = false;
+    }
+    if (device->input_event) {
+      CloseHandle(device->input_event);
+      device->input_event = nullptr;
+    }
   }
   if (device->handle != INVALID_HANDLE_VALUE) {
     CloseHandle(device->handle);

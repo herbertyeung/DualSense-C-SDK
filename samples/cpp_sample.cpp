@@ -12,10 +12,14 @@ int main() {
       DualSense::Controller controller(context.native(), devices.front());
       const ds5_capabilities caps = controller.capabilities();
       std::cout << "Capabilities: 0x" << std::hex << caps.flags << std::dec << "\n";
-      const ds5_state state = controller.state();
-      std::cout << "Buttons: 0x" << std::hex << state.buttons << std::dec
-                << " L2=" << static_cast<int>(state.left_trigger)
-                << " R2=" << static_cast<int>(state.right_trigger) << "\n";
+      ds5_state state{};
+      if (controller.tryState(state)) {
+        std::cout << "Buttons: 0x" << std::hex << state.buttons << std::dec
+                  << " L2=" << static_cast<int>(state.left_trigger)
+                  << " R2=" << static_cast<int>(state.right_trigger) << "\n";
+      } else {
+        std::cout << "No input report ready immediately\n";
+      }
       controller.setLightbar(0, 64, 255);
       controller.setPlayerLeds(0x15);
       controller.setMicLed(DS5_MIC_LED_PULSE);

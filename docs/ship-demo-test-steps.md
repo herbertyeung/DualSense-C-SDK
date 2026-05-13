@@ -42,5 +42,6 @@ Debug:
 Coverage notes:
 
 - Use `dualsense_ship_demo` for integrated gameplay input, motion, rumble, adaptive triggers, lightbar, and speaker-event behavior.
-- Use `dualsense_diag --test` for the full current output API set: lightbar, player LEDs, mic LED, rumble, timed haptic helper, and all public trigger modes.
-- Use `dualsense_diag --capabilities`, `--poll`, `--tone`, `--capture`, and `--raw-output-reset` for API paths that the ship demo does not exercise directly.
+- Use `dualsense_diag --test` for the full current output API set: lightbar, player LEDs, mic LED, rumble, timed haptic helper, all public trigger modes, and public `ds5_reset_feedback` cleanup.
+- Use `dualsense_diag --poll-timeout 180 16` and `--try-poll 180` to verify bounded/nonblocking input polling.
+- Use `dualsense_diag --capabilities`, `--poll`, `--tone`, `--capture`, and `--raw-output-reset` for API paths that the ship demo does not exercise directly. `--raw-output-reset` is protocol/debug oriented; prefer `ds5_reset_feedback` for normal cleanup.
