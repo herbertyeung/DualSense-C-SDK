@@ -50,10 +50,10 @@ The C API is declared in `include/dualsense/dualsense.h`.
 | Struct helpers | `ds5_*_init` helpers | Initialize public structs with the correct `size` and `version` before passing them to the SDK. |
 | Discovery | `ds5_enumerate` | First call with `devices = NULL` and `capacity = 0` to obtain the count. |
 | Open/close | `ds5_open`, `ds5_close` | Open a `ds5_device_info` returned by enumeration. |
-| Input | `ds5_poll_state` | Fills `ds5_state` with buttons, sticks, triggers, touch, IMU, battery, transport, and raw report bytes. |
+| Input | `ds5_poll_state`, `ds5_poll_state_timeout`, `ds5_try_poll_state` | Fills `ds5_state` with buttons, sticks, triggers, touch, IMU, battery, transport, and raw report bytes. Use the timeout or try variants in frame loops and UI code. |
 | Capabilities | `ds5_get_capabilities` | Returns `ds5_capabilities.flags`; check feature flags before enabling UI or gameplay features. |
 | LEDs | `ds5_set_lightbar`, `ds5_set_player_leds`, `ds5_set_mic_led` | Sets lightbar RGB, player LED mask, and mic LED mode. |
-| Rumble/haptics | `ds5_set_rumble`, `ds5_set_haptic_pattern` | Classic rumble and a timed haptic helper. |
+| Rumble/haptics | `ds5_set_rumble`, `ds5_set_haptic_pattern`, `ds5_reset_feedback` | Classic rumble, a timed haptic helper, and a one-call reset for SDK-managed rumble, triggers, and mic LED. |
 | Adaptive triggers | `ds5_trigger_effect_*`, `ds5_set_trigger_effect` | Build off, constant resistance, section resistance, weapon, and vibration effects, then send them to L2 or R2. |
 | Raw reports | `ds5_send_raw_output_report` | Advanced escape hatch for protocol experiments. |
 | Audio | `ds5_audio_enumerate_endpoints`, `ds5_audio_play_pcm`, `ds5_audio_capture_start`, `ds5_audio_capture_stop` | Uses explicit Windows audio endpoint IDs and does not change the system default audio device. |
@@ -233,7 +233,7 @@ The ship demo also supports XInput and keyboard fallback. See `docs/ship-demo-te
 - Log `ds5_get_last_error()` on failure.
 - Initialize `size` and `version` fields before passing structs to the library.
 - Check capability flags before using optional features.
-- Reset rumble and trigger effects before exiting gameplay or diagnostics.
+- Use `ds5_reset_feedback` before exiting gameplay or diagnostics. It clears SDK-managed rumble, adaptive triggers, and mic LED; it does not undo arbitrary protocol state sent through `ds5_send_raw_output_report`.
 - Close devices before shutting down the context.
 
 ## 中文
@@ -286,10 +286,10 @@ C API 声明在 `include/dualsense/dualsense.h`。
 | 结构体辅助 | `ds5_*_init` helpers | 调用 SDK 前用 helper 初始化 public struct 的 `size` 和 `version`。 |
 | 发现设备 | `ds5_enumerate` | 先用 `devices = NULL`、`capacity = 0` 调一次获得数量。 |
 | 打开/关闭 | `ds5_open`, `ds5_close` | 打开枚举返回的 `ds5_device_info`。 |
-| 输入 | `ds5_poll_state` | 填充 `ds5_state`，包含按钮、摇杆、扳机、触摸、IMU、电量、传输类型和原始 report。 |
+| 输入 | `ds5_poll_state`, `ds5_poll_state_timeout`, `ds5_try_poll_state` | 填充 `ds5_state`，包含按钮、摇杆、扳机、触摸、IMU、电量、传输类型和原始 report。游戏循环和 UI 代码优先使用 timeout 或 try 版本。 |
 | 能力 | `ds5_get_capabilities` | 返回 `ds5_capabilities.flags`；启用 UI 或玩法特性前应检查能力标记。 |
 | 灯光 | `ds5_set_lightbar`, `ds5_set_player_leds`, `ds5_set_mic_led` | 设置光条 RGB、玩家灯 mask、麦克风灯模式。 |
-| 震动/触觉 | `ds5_set_rumble`, `ds5_set_haptic_pattern` | 经典 rumble 和一个按时长播放的 haptic 辅助函数。 |
+| 震动/触觉 | `ds5_set_rumble`, `ds5_set_haptic_pattern`, `ds5_reset_feedback` | 经典 rumble、按时长播放的 haptic 辅助函数，以及一次性清理 SDK 管理的 rumble、扳机和麦克风灯。 |
 | 自适应扳机 | `ds5_trigger_effect_*`, `ds5_set_trigger_effect` | 先构造关闭、恒定阻力、区间阻力、武器感或震动 effect，再发送到 L2 或 R2。 |
 | 原始 report | `ds5_send_raw_output_report` | 给协议实验使用的高级逃生口。 |
 | 音频 | `ds5_audio_enumerate_endpoints`, `ds5_audio_play_pcm`, `ds5_audio_capture_start`, `ds5_audio_capture_stop` | 使用明确的 Windows 音频 endpoint id，不会修改系统默认音频设备。 |
@@ -469,5 +469,5 @@ int main() {
 - 失败时记录 `ds5_get_last_error()`。
 - 传入结构体前初始化 `size` 和 `version` 字段。
 - 使用可选功能前检查 capability flags。
-- 游戏或诊断程序退出前重置 rumble 和扳机效果。
+- 游戏或诊断程序退出前调用 `ds5_reset_feedback`。它会清理 SDK 管理的 rumble、自适应扳机和麦克风灯；不会撤销通过 `ds5_send_raw_output_report` 发送的任意协议状态。
 - 关闭 device 后再关闭 context。

@@ -40,8 +40,11 @@ int main(void) {
         if (ds5_get_capabilities(device, &caps) == DS5_OK) {
           printf("Capabilities: 0x%08x\n", caps.flags);
         }
-        if (ds5_poll_state(device, &state) == DS5_OK) {
+        result = ds5_poll_state_timeout(device, 16, &state);
+        if (result == DS5_OK) {
           printf("Buttons: 0x%08x L2=%u R2=%u\n", state.buttons, state.left_trigger, state.right_trigger);
+        } else if (result == DS5_E_TIMEOUT) {
+          puts("No input report ready within 16ms");
         }
         ds5_close(device);
       } else {

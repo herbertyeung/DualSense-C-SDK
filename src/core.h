@@ -22,6 +22,7 @@ struct ds5_device {
   ds5_device_info info{};
   ds5_output_state output{};
   std::mutex mutex;
+  std::mutex input_mutex;
 };
 
 void ds5_set_last_error_message(const std::string& message);

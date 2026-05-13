@@ -13,7 +13,9 @@ This SDK targets Windows 10/11 with a USB-connected DualSense controller for ful
 ### HID Scope
 
 - Input reports are parsed into a stable `ds5_state` structure and retain raw bytes for debugging.
+- Opened HID handles use overlapped I/O. `ds5_poll_state` waits indefinitely, `ds5_poll_state_timeout` waits for the caller-provided bound, and `ds5_try_poll_state` returns `DS5_E_TIMEOUT` when no report is ready immediately.
 - Output reports are built through `ds5_internal_build_usb_output_report`.
+- `ds5_reset_feedback` clears SDK-managed rumble, adaptive triggers, and mic LED in one output report while preserving lightbar and player LEDs.
 - `ds5_send_raw_output_report` is available as an explicit advanced escape hatch for protocol experiments.
 - Callers should prefer the typed APIs for lightbar, player LEDs, mic LED, rumble, haptics, and adaptive triggers before falling back to raw output reports.
 - `ds5_send_raw_output_report` is USB-only in v1; Bluetooth output needs a different report envelope and checksum.
@@ -37,7 +39,9 @@ This SDK targets Windows 10/11 with a USB-connected DualSense controller for ful
 ### HID 范围
 
 - 输入 report 会被解析成稳定的 `ds5_state` 结构，同时保留原始字节用于调试。
+- 打开的 HID handle 使用 overlapped I/O。`ds5_poll_state` 会无限等待，`ds5_poll_state_timeout` 按调用方给定时限等待，`ds5_try_poll_state` 在没有立即可用 report 时返回 `DS5_E_TIMEOUT`。
 - 输出 report 通过 `ds5_internal_build_usb_output_report` 构造。
+- `ds5_reset_feedback` 会用一个输出 report 清理 SDK 管理的 rumble、自适应扳机和麦克风灯，同时保留 lightbar 和玩家灯。
 - `ds5_send_raw_output_report` 是明确提供给协议实验使用的高级逃生口。
 - 调用方应优先使用 lightbar、玩家灯、麦克风灯、rumble、haptics 和自适应扳机这些类型化 API；只有协议实验才需要退回 raw output report。
 - `ds5_send_raw_output_report` 在 v1 中仅支持 USB；Bluetooth 输出需要不同的 report 封装和校验。
