@@ -21,6 +21,8 @@
 #include <thread>
 #include <vector>
 
+#include "wav_pcm.h"
+
 namespace {
 
 template <typename T>
@@ -204,57 +206,6 @@ std::vector<int16_t> make_tone(uint32_t sample_rate, uint32_t duration_ms) {
     pcm[i * 2u + 1u] = sample;
   }
   return pcm;
-}
-
-bool load_wav_pcm16(const char* path, std::vector<uint8_t>& pcm, ds5_audio_format& format) {
-  std::ifstream file(path, std::ios::binary);
-  if (!file) {
-    return false;
-  }
-  std::vector<uint8_t> data((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-  if (data.size() < 44u || std::memcmp(data.data(), "RIFF", 4) != 0 ||
-      std::memcmp(data.data() + 8, "WAVE", 4) != 0) {
-    return false;
-  }
-
-  uint16_t audio_format = 0;
-  uint16_t channels = 0;
-  uint32_t sample_rate = 0;
-  uint16_t bits = 0;
-  size_t cursor = 12u;
-  size_t data_offset = 0u;
-  uint32_t data_size = 0u;
-  while (cursor + 8u <= data.size()) {
-    const char* id = reinterpret_cast<const char*>(data.data() + cursor);
-    uint32_t size = 0;
-    std::memcpy(&size, data.data() + cursor + 4u, 4u);
-    cursor += 8u;
-    if (cursor + size > data.size()) {
-      break;
-    }
-    if (std::memcmp(id, "fmt ", 4) == 0 && size >= 16u) {
-      std::memcpy(&audio_format, data.data() + cursor, 2u);
-      std::memcpy(&channels, data.data() + cursor + 2u, 2u);
-      std::memcpy(&sample_rate, data.data() + cursor + 4u, 4u);
-      std::memcpy(&bits, data.data() + cursor + 14u, 2u);
-    } else if (std::memcmp(id, "data", 4) == 0) {
-      data_offset = cursor;
-      data_size = size;
-    }
-    cursor += size + (size & 1u);
-  }
-
-  if (audio_format != 1u || channels == 0u || sample_rate == 0u || bits != 16u ||
-      data_offset == 0u || data_size == 0u || data_offset + data_size > data.size()) {
-    return false;
-  }
-
-  pcm.assign(data.begin() + data_offset, data.begin() + data_offset + data_size);
-  ds5_audio_format_init(&format, 0, 0, 0);
-  format.sample_rate = sample_rate;
-  format.channels = channels;
-  format.bits_per_sample = bits;
-  return true;
 }
 
 void capture_callback(const void*, uint32_t bytes, const ds5_audio_format* format, void* user_data) {
@@ -498,7 +449,7 @@ int main(int argc, char** argv) {
   if (argc > 2 && std::string(argv[1]) == "--play-wav") {
     std::vector<uint8_t> pcm;
     ds5_audio_format format{};
-    if (!load_wav_pcm16(argv[2], pcm, format)) {
+    if (!ds5_tool_load_wav_pcm16(argv[2], pcm, format)) {
       std::cerr << "error: --play-wav requires a PCM 16-bit WAV file\n";
       ds5_shutdown(context);
       return 1;

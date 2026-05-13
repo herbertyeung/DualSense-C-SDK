@@ -61,10 +61,10 @@ target_include_directories(dualsense_static
 target_link_libraries(dualsense_static PRIVATE hid setupapi ole32 uuid)
 
 if(DS5_BUILD_TOOLS)
-  add_executable(dualsense_diag tools/dualsense_diag.cpp)
+  add_executable(dualsense_diag tools/dualsense_diag.cpp tools/wav_pcm.cpp)
   target_link_libraries(dualsense_diag PRIVATE dualsense_static)
 
-  add_executable(dualsense_ship_demo WIN32 tools/dualsense_ship_demo.cpp tools/glb_loader.cpp)
+  add_executable(dualsense_ship_demo WIN32 tools/dualsense_ship_demo.cpp tools/glb_loader.cpp tools/wav_pcm.cpp)
   target_compile_definitions(dualsense_ship_demo PRIVATE UNICODE NOMINMAX WIN32_LEAN_AND_MEAN)
   target_link_libraries(dualsense_ship_demo PRIVATE dualsense_static d3d11 dxgi d3dcompiler xinput)
 endif()
@@ -81,10 +81,15 @@ if(DS5_BUILD_TESTS)
   enable_testing()
   add_executable(dualsense_tests
     tests/test_main.cpp
+    tools/wav_pcm.cpp
   )
   target_include_directories(dualsense_tests PRIVATE src include)
   target_link_libraries(dualsense_tests PRIVATE dualsense_static)
   add_test(NAME dualsense_tests COMMAND dualsense_tests)
+  set_tests_properties(dualsense_tests PROPERTIES
+    LABELS "unit;sdk;parser;output;demo"
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+  )
 endif()
 
 include(CMakePackageConfigHelpers)
